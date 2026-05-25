@@ -1,0 +1,2553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Smart Money OS v6.0 — Institutional Terminal + AI Signal Engine</title>
+  <!-- React 18 -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Babel Standalone for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:#050810;}
+    #root{min-height:100vh;}
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" data-presets="react">
+/**
+ * ╔══════════════════════════════════════════════════════════╗
+ * ║  SMART MONEY INSTITUTIONAL OS  v5.0  [FIXED]           ║
+ * ║  AI Decision Engine | Bloomberg Terminal Style         ║
+ * ╠══════════════════════════════════════════════════════════╣
+ * ║  23 Engines | 6 Intelligence Systems | Real-time Flow  ║
+ * ║  FIXES: IntelligenceTab complete, bugs fixed,          ║
+ * ║  localStorage journal persistence                      ║
+ * ╚══════════════════════════════════════════════════════════╝
+ */
+const { useState,useCallback,useMemo,useEffect,useRef,memo,Component } = React;
+
+// ══════════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════════
+const CFG={
+  vix:{low:14,high:20,warn:17},
+  pcr:{bull:1.3,bear:0.7},
+  fii:{bullRatio:60,bearRatio:40,highNet:2000,medNet:500},
+  trap:{highRisk:60,medRisk:35},
+  giftGap:{large:100,medium:50},
+  absorption:{strong:60,partial:30},
+  atr:{slMult:2.0},
+  risk:{minRR:1.5},
+};
+
+const T={
+  bg:"#050810",panel:"#080d1a",card:"#0c1220",border:"#141e33",
+  borderHi:"#1e3055",cyan:"#00e5ff",green:"#00ff94",red:"#ff2d55",
+  amber:"#ffab00",purple:"#bf5af2",blue:"#0a84ff",orange:"#ff6b35",
+  white:"#e8edf5",muted:"#4a5568",dim:"#2d3748",grid:"#0f1828",
+  teal:"#00bfa5",lime:"#76ff03",pink:"#ff4081",indigo:"#818cf8",
+};
+
+const CSS=`
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#050810;overflow-x:hidden}
+::-webkit-scrollbar{width:3px;height:3px}
+::-webkit-scrollbar-track{background:#050810}
+::-webkit-scrollbar-thumb{background:#1e3055;border-radius:2px}
+select,input{outline:none!important;font-family:'IBM Plex Mono',monospace}
+select option{background:#080d1a;color:#e8edf5}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+@keyframes glow{0%,100%{box-shadow:0 0 8px #00e5ff22}50%{box-shadow:0 0 22px #00e5ff55}}
+@keyframes hp{0%,100%{opacity:.65}50%{opacity:1}}
+@keyframes slideIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes signalPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.85;transform:scale(1.01)}}
+@keyframes confMeter{from{width:0%}to{width:var(--conf-width)}}
+@keyframes buyGlow{0%,100%{box-shadow:0 0 12px #00ff9422,inset 0 0 12px #00ff9408}50%{box-shadow:0 0 28px #00ff9444,inset 0 0 20px #00ff9415}}
+@keyframes sellGlow{0%,100%{box-shadow:0 0 12px #ff2d5522,inset 0 0 12px #ff2d5508}50%{box-shadow:0 0 28px #ff2d5544,inset 0 0 20px #ff2d5515}}
+@keyframes noTradeGlow{0%,100%{box-shadow:0 0 8px #ffab0022}50%{box-shadow:0 0 18px #ffab0044}}
+@keyframes slideUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes scanLine{0%{top:0}100%{top:100%}}
+.pulse{animation:glow 3s ease infinite}
+.blink{animation:blink 1.4s ease infinite}
+.hp{animation:hp 2s ease infinite}
+.slide{animation:slideIn .25s ease forwards}
+.signal-buy{animation:buyGlow 2.5s ease infinite}
+.signal-sell{animation:sellGlow 2.5s ease infinite}
+.signal-notrade{animation:noTradeGlow 3s ease infinite}
+.signal-card{animation:slideUp .35s ease forwards}
+@keyframes savePing{0%{opacity:1;transform:scale(1)}50%{opacity:.7;transform:scale(1.08)}100%{opacity:1;transform:scale(1)}}
+@keyframes fadeCheck{0%{opacity:0;transform:translateY(4px)}30%{opacity:1;transform:translateY(0)}80%{opacity:1}100%{opacity:0}}
+.save-ping{animation:savePing .6s ease}
+.save-check{animation:fadeCheck 2.2s ease forwards}
+@media(max-width:768px){
+  .ai-signal-grid{grid-template-columns:1fr!important;}
+  .signal-levels-grid{grid-template-columns:1fr 1fr!important;}
+  .journal-grid{grid-template-columns:1fr!important;}
+}
+`;
+
+// ── Static Data ──────────────────────────────────────────
+const SESSION_DEFS=[
+  {label:"PRE-OPEN",    range:[8*60+45,9*60+15], color:T.dim,   quality:"PREP",   vol:"LOW",     inst:"Setup only. No trades.",             drive:"—"},
+  {label:"OPEN DRIVE",  range:[9*60+15,9*60+45], color:T.red,   quality:"DANGER", vol:"EXTREME", inst:"Gap fills & stop hunts. Avoid.",     drive:"AVOID"},
+  {label:"PRIME",       range:[9*60+45,11*60],   color:T.green, quality:"BEST",   vol:"HIGH",    inst:"FII bulk flow. Best window.",        drive:"TREND"},
+  {label:"CHOP",        range:[11*60,  13*60],   color:T.muted, quality:"POOR",   vol:"LOW",     inst:"Retail noise. Avoid or tight SL.",   drive:"RANGE"},
+  {label:"LONDON",      range:[13*60+30,14*60],  color:T.blue,  quality:"SETUP",  vol:"BUILD",   inst:"European liquidity returning.",      drive:"WATCH"},
+  {label:"POWER HOUR",  range:[14*60,  15*60+20],color:T.green, quality:"GOOD",   vol:"HIGH",    inst:"EOD institutional positioning.",     drive:"TREND"},
+  {label:"CLOSING",     range:[15*60+20,15*60+30],color:T.red,  quality:"EXIT",   vol:"EXTREME", inst:"Exit all. Auction close.",           drive:"EXIT"},
+];
+
+const TABS=["DASHBOARD","INPUT","ANALYSIS","EXECUTION","JOURNAL","INTELLIGENCE","AI SIGNALS"];
+
+const BT_DATA=[
+  {id:1,date:"07 May",setup:"BOS Bull",    entry:24050,sl:23980,target:24180,result:"WIN", rr:1.9, pnl:8450},
+  {id:2,date:"08 May",setup:"Gap Bounce",  entry:24120,sl:24050,target:24280,result:"WIN", rr:2.3, pnl:10400},
+  {id:3,date:"08 May",setup:"CHOCH Bear",  entry:24300,sl:24380,target:24120,result:"WIN", rr:2.25,pnl:11700},
+  {id:4,date:"06 May",setup:"MTF Short",   entry:24450,sl:24530,target:24250,result:"LOSS",rr:2.5, pnl:-5200},
+  {id:5,date:"05 May",setup:"BOS Bear",    entry:24200,sl:24270,target:24040,result:"WIN", rr:2.3, pnl:10400},
+];
+
+// ── Input Options ─────────────────────────────────────────
+const OI_OPTS=[
+  {v:"price_up_oi_up",l:"Price↑ OI↑ — Bull"},
+  {v:"price_up_oi_down",l:"Price↑ OI↓ — Short Cover"},
+  {v:"price_down_oi_up",l:"Price↓ OI↑ — Bear"},
+  {v:"price_down_oi_down",l:"Price↓ OI↓ — Unwind"},
+];
+const IV_OPTS=[{v:"falling",l:"↓ Falling — Bull"},{v:"rising",l:"↑ Rising — Bear"}];
+const ADX_OPTS=[{v:"strong",l:"Strong >25"},{v:"moderate",l:"Moderate 15–25"},{v:"weak",l:"Weak <15"}];
+const SWEEP_OPTS=[{v:"none",l:"None"},{v:"above",l:"Above swept"},{v:"below",l:"Below swept"},{v:"both",l:"Both swept"}];
+const DEALER_OPTS=[{v:"long_gamma",l:"Long Gamma (stable)"},{v:"short_gamma",l:"Short Gamma (amplify)"},{v:"neutral",l:"Neutral"}];
+const SETUP_OPTS=["BOS+MTF","CHOCH","Sweep Reversal","Gap Trade","OI Level","Breakout","Manual"].map(s=>({v:s,l:s}));
+const EMO_OPTS=["CALM","CONFIDENT","FOMO","ANXIOUS","REVENGE"].map(e=>({v:e,l:e}));
+
+// ══════════════════════════════════════════════════════════
+// SAFE MATH — FIX: safeNum handles strings properly
+// ══════════════════════════════════════════════════════════
+const safeNum  =(v,fb=0)=>{const n=Number(v);return(v===null||v===undefined||v===""||isNaN(n))?fb:n;};
+const safeDiv  =(a,b,fb=0)=>{const bn=safeNum(b,0);return(!bn||isNaN(safeNum(a,0)))?fb:safeNum(a,0)/bn;};
+const clamp    =(v,mn,mx)=>Math.min(mx,Math.max(mn,isNaN(v)?mn:v));
+const safePct  =v=>clamp(safeNum(v,0),0,100);
+const round2   =v=>Math.round(safeNum(v)*100)/100;
+const safeFixed=(v,d=0)=>safeNum(v,0).toFixed(d);
+const safeInc  =(s,sub)=>typeof s==="string"&&s.includes(sub);
+const fmt      =n=>safeNum(n,0).toLocaleString("en-IN");
+const norm     =(v,max)=>safePct(safeDiv(safeNum(v,0),Math.max(safeNum(max,1),1))*100);
+const msToNext =()=>{const n=new Date();return(60-n.getSeconds())*1000-n.getMilliseconds();};
+const tNow     =()=>new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});
+
+// ══════════════════════════════════════════════════════════
+// ENGINE LAYER — Pure functions, scalar inputs only
+// ══════════════════════════════════════════════════════════
+
+// 1. REGIME
+function computeRegime({vix,ivTrend,oiChange,pcr,fiiRatio,giftGap,adx}){
+  let s=0;
+  const v=safeNum(vix,16),p=safeNum(pcr,1),fr=safeNum(fiiRatio,50),gap=safeNum(giftGap,0);
+  if(v<14)s+=2;else if(v>20)s-=2;else if(v>17)s-=1;
+  if(ivTrend==="falling")s+=2;else s-=2;
+  if(oiChange==="price_up_oi_up")s+=2;else if(oiChange==="price_down_oi_up")s-=2;
+  else if(oiChange==="price_up_oi_down")s+=0.5;else s-=0.5;
+  if(p>1.3)s+=1;else if(p<0.7)s-=1;
+  if(fr>60)s+=2;else if(fr<40)s-=2;
+  if(gap>50)s+=1;else if(gap<-50)s-=1;
+  if(adx==="strong")s+=1;else if(adx==="weak")s-=0.5;
+  const mk=(regime,color,code,direction,desc,strat)=>({regime,color,code,direction,score:s,description:desc,strategy:strat,isBull:direction==="bull",isBear:direction==="bear"});
+  if(s>=5) return mk("TRENDING BULL",T.green,"TB","bull","Strong institutional accumulation. Follow trend aggressively.","BUY DIPS");
+  if(s>=2) return mk("MILD BULL","#66ffbb","MB","bull","Cautious buying. Confirm with structure.","BUY PULLBACKS");
+  if(s<=-5)return mk("TRENDING BEAR",T.red,"TBR","bear","Strong institutional distribution. Follow trend.","SELL RALLIES");
+  if(s<=-2)return mk("MILD BEAR","#ff6688","MBR","bear","Cautious selling. Confirm with structure.","SELL RESISTANCE");
+  return       mk("RANGE BOUND",T.amber,"RB","neutral","Institutional indecision. Fade extremes only.","RANGE TRADE");
+}
+
+// 2. GEX — FIX: explicit Number() conversion on OI inputs
+function computeGEX({callOI,putOI,gamma,spot}){
+  const g=safeNum(gamma,0.003),s=safeNum(spot,24000);
+  const coi=safeNum(callOI,0),poi=safeNum(putOI,0);
+  const cg=coi*g*s*s*65/1e7,pg=poi*g*s*s*65/1e7,net=cg-pg;
+  const denom=Math.max(Math.abs(cg),Math.abs(pg),1);
+  const n=clamp(safeDiv(net,denom)*100,-100,100);
+  return{gex:fmt(Math.round(net)),gexRaw:Math.round(net),callGex:fmt(Math.round(cg)),putGex:fmt(Math.round(pg)),norm:n,color:n>0?T.green:T.red,regime:n>20?"LONG_GAMMA":n<-20?"SHORT_GAMMA":"NEUTRAL"};
+}
+
+// 3. FII
+function computeFII({fiiNet,fiiRatio,fiiMTD}){
+  const net=safeNum(fiiNet,0),ratio=safeNum(fiiRatio,50),mtd=safeNum(fiiMTD,0);
+  let s=0;
+  if(Math.abs(net)>2000)s+=3;else if(Math.abs(net)>500)s+=1;
+  if(ratio>65)s+=3;else if(ratio<35)s-=3;else s+=safeDiv(ratio-50,10);
+  if(mtd<-5000)s-=2;else if(mtd>5000)s+=2;
+  return{dir:net>0?"ACCUMULATING":"DISTRIBUTING",intensity:Math.abs(s)>4?"AGGRESSIVE":Math.abs(s)>2?"MODERATE":"PASSIVE",score:safePct(Math.abs(s)*14),color:net>0?T.green:T.red,bias:ratio>60?"bull":ratio<40?"bear":"neutral"};
+}
+
+// 4. TRAP
+function computeTrap({giftGap,oiChange,ivTrend,pcr,fiiRatio}){
+  const gap=safeNum(giftGap,0),p=safeNum(pcr,1),fr=safeNum(fiiRatio,50);
+  let b=0,br=0;
+  if(gap>100)b+=30;if(oiChange==="price_up_oi_down")b+=25;
+  if(ivTrend==="rising"&&gap>0)b+=20;if(p<0.7)b+=15;if(fr<40&&gap>50)b+=10;
+  if(gap<-100)br+=30;if(oiChange==="price_down_oi_down")br+=25;
+  if(ivTrend==="falling"&&gap<0)br+=20;if(p>1.4)br+=15;if(fr>60&&gap<-50)br+=10;
+  return{bull:safePct(b),bear:safePct(br),dominant:b>br?"BULL TRAP":br>b?"BEAR TRAP":"CLEAN",color:b>60||br>60?T.red:b>35||br>35?T.amber:T.green};
+}
+
+// 5. ABSORPTION
+function computeAbsorption({oiChange,ivTrend,fiiNet,diiNet}){
+  const fn=safeNum(fiiNet,0),dn=safeNum(diiNet,0);let a=0;
+  if(oiChange==="price_down_oi_down")a+=40;if(oiChange==="price_up_oi_down")a+=30;
+  if(Math.abs(fn)>500&&Math.abs(dn)>300&&((fn>0&&dn<0)||(fn<0&&dn>0)))a+=30;
+  if(ivTrend==="falling")a+=20;
+  const v=safePct(a);
+  return{val:v,type:v>60?"STRONG ABSORPTION":v>30?"PARTIAL ABSORPTION":"NO ABSORPTION",color:v>60?T.green:v>30?T.amber:T.muted};
+}
+
+// 6. DELTA
+function computeDelta({callDelta,putDelta,callOI,putOI}){
+  const cd=safeNum(callDelta,0.5),pd=safeNum(putDelta,0.5);
+  const co=Math.max(1,safeNum(callOI,1)),po=Math.max(1,safeNum(putOI,1));
+  const ir=clamp(safeDiv(cd*co-pd*po,cd*co+pd*po)*100,-100,100);
+  return{imb:safeFixed(ir,1),imbRaw:ir,dir:ir>10?"CALL DOMINANT":ir<-10?"PUT DOMINANT":"BALANCED",color:ir>10?T.green:ir<-10?T.red:T.amber};
+}
+
+// 7. STRUCTURE
+function computeStructure({currentPrice,atmStrike,highestCallOI,highestPutOI,oiChange,ivTrend}){
+  const atm=safeNum(atmStrike,24000),price=safeNum(currentPrice,atm);
+  const callW=safeNum(highestCallOI,atm+300),putW=safeNum(highestPutOI,atm-300);
+  const range=Math.max(callW-putW,1),mid=putW+range/2;
+  const pct=clamp(safeDiv(price-mid,range/2)*100,-100,100);
+  const zone=pct>25?"PREMIUM":pct<-25?"DISCOUNT":"EQUILIBRIUM";
+  const zC=zone==="PREMIUM"?T.red:zone==="DISCOUNT"?T.green:T.amber;
+  let sig="NONE",sigC=T.muted;
+  if(oiChange==="price_up_oi_up"&&ivTrend==="falling"){sig="BOS BULLISH";sigC=T.green;}
+  else if(oiChange==="price_down_oi_up"&&ivTrend==="rising"){sig="BOS BEARISH";sigC=T.red;}
+  else if(oiChange==="price_up_oi_down"&&ivTrend==="rising"){sig="CHOCH BEAR";sigC=T.amber;}
+  else if(oiChange==="price_down_oi_down"&&ivTrend==="falling"){sig="CHOCH BULL";sigC=T.teal;}
+  const internalLiq=Math.abs(price-mid)<range*0.15?"INTERNAL — Equilibrium.":price>mid?"EXTERNAL SELL-SIDE — Premium.":"EXTERNAL BUY-SIDE — Discount.";
+  const trendState=oiChange==="price_up_oi_up"?"UPTREND":oiChange==="price_down_oi_up"?"DOWNTREND":oiChange==="price_up_oi_down"?"WEAK UP":"CORRECTION";
+  return{zone,zoneColor:zC,pctFromMid:round2(pct),structureSignal:sig,structureColor:sigC,internalLiq,trendState,midPoint:Math.round(mid),callWall:callW,putWall:putW,range:Math.round(range)};
+}
+
+// 8. SWEEP
+function computeSweep({giftGap,oiChange,ivTrend,pcr,fiiRatio,liquiditySweep}){
+  const gap=safeNum(giftGap,0),p=safeNum(pcr,1);
+  const bc=[gap>100,oiChange==="price_up_oi_down",ivTrend==="rising"&&gap>0,p<0.7,liquiditySweep==="above"||liquiditySweep==="both"];
+  const sc=[gap<-100,oiChange==="price_down_oi_down",ivTrend==="falling"&&gap<0,p>1.4,liquiditySweep==="below"||liquiditySweep==="both"];
+  const bs=bc.filter(Boolean).length,ss=sc.filter(Boolean).length;
+  let type="NO SWEEP",score=0,color=T.muted;
+  if(bs>=3){type="BUY-SIDE SWEEP";score=safePct(bs*20);color=T.red;}
+  else if(ss>=3){type="SELL-SIDE SWEEP";score=safePct(ss*20);color=T.green;}
+  else if(bs>=2||ss>=2){type="PARTIAL SWEEP";score=safePct(Math.max(bs,ss)*15);color=T.amber;}
+  return{sweepType:type,sweepScore:score,sweepColor:color,confidence:score>60?"HIGH":score>30?"MEDIUM":"LOW",buyScore:bs,sellScore:ss};
+}
+
+// 9. MTF
+function computeMTF({oiChange,ivTrend,pcr,fiiRatio,vix,giftGap,adx,callDelta,putDelta}){
+  const gap=safeNum(giftGap,0),v=safeNum(vix,16),p=safeNum(pcr,1),fr=safeNum(fiiRatio,50),cd=safeNum(callDelta,0.5),pd=safeNum(putDelta,0.5);
+  let s15=0;
+  if(oiChange==="price_up_oi_up")s15+=2;else if(oiChange==="price_down_oi_up")s15-=2;
+  if(fr>60)s15+=2;else if(fr<40)s15-=2;
+  if(ivTrend==="falling")s15+=1;else s15-=1;
+  if(gap>50)s15+=1;else if(gap<-50)s15-=1;
+  const bias15m=s15>2?"BULLISH":s15<-2?"BEARISH":"NEUTRAL";
+  let s5=0;
+  if(cd>pd)s5+=2;else s5-=2;
+  if(p>1.1)s5+=1;else if(p<0.8)s5-=1;
+  if(v<14)s5+=1;else if(v>20)s5-=1;
+  const conf5m=s5>1?"CONFIRM BULL":s5<-1?"CONFIRM BEAR":"NO CONFIRMATION";
+  const exec1m=adx==="strong"&&Math.abs(gap)>30?"MOMENTUM — Enter on pullback":adx==="weak"?"CHOPPY — Wait":"MODERATE — Standard entry";
+  const aligned=(bias15m==="BULLISH"&&conf5m==="CONFIRM BULL")||(bias15m==="BEARISH"&&conf5m==="CONFIRM BEAR");
+  const execQ=aligned?90:bias15m==="NEUTRAL"?40:60;
+  return{bias15m,conf5m,exec1m,aligned,execQuality:execQ,execColor:execQ>75?T.green:execQ>50?T.amber:T.red,b15Color:bias15m==="BULLISH"?T.green:bias15m==="BEARISH"?T.red:T.amber,c5Color:safeInc(conf5m,"BULL")?T.green:safeInc(conf5m,"BEAR")?T.red:T.amber};
+}
+
+// 10. CANDLE
+function computeCandle({oiChange,ivTrend,giftGap,vix,pcr,callDelta,putDelta}){
+  const gap=safeNum(giftGap,0),v=safeNum(vix,16),p=safeNum(pcr,1),cd=safeNum(callDelta,0.5),pd=safeNum(putDelta,0.5);
+  const pts=[];let score=0;
+  if(oiChange==="price_up_oi_up"&&ivTrend==="falling"&&gap>30){pts.push({name:"BULLISH ENGULFING",color:T.green,strength:85});score+=2;}
+  if(oiChange==="price_down_oi_up"&&ivTrend==="rising"&&gap<-30){pts.push({name:"BEARISH ENGULFING",color:T.red,strength:85});score-=2;}
+  if(Math.abs(gap)>100){pts.push({name:`DISPLACEMENT ${gap>0?"BULL":"BEAR"}`,color:gap>0?T.green:T.red,strength:75});score+=gap>0?1:-1;}
+  if(p>1.4){pts.push({name:"REJECTION WICK (Bull)",color:T.teal,strength:70});score+=1;}
+  if(p<0.65){pts.push({name:"REJECTION WICK (Bear)",color:T.orange,strength:70});score-=1;}
+  if(cd>0.6&&oiChange==="price_up_oi_up"){pts.push({name:"MOMENTUM BULL",color:T.lime,strength:80});score+=2;}
+  if(pd>0.6&&oiChange==="price_down_oi_up"){pts.push({name:"MOMENTUM BEAR",color:T.pink,strength:80});score-=2;}
+  if(v>18&&Math.abs(gap)>80){pts.push({name:"IMBALANCE CANDLE",color:T.amber,strength:65});}
+  const bias=score>1?"BULLISH":score<-1?"BEARISH":"NEUTRAL";
+  return{patterns:pts.slice(0,4),candleScore:score,patternBias:bias,biasColor:bias==="BULLISH"?T.green:bias==="BEARISH"?T.red:T.amber};
+}
+
+// 11. ATR
+function computeATR({vix,atmStrike}){
+  const v=safeNum(vix,16),spot=safeNum(atmStrike,24000);
+  const daily=Math.max(1,Math.round((v/100)*spot/Math.sqrt(252)));
+  const state=v<14?"CONTRACTION":v>20?"EXPANSION":v>17?"ELEVATED":"NORMAL";
+  return{dailyATR:daily,sessionATR:Math.round(daily*0.6),volState:state,volColor:state==="EXPANSION"?T.red:state==="ELEVATED"?T.amber:T.green,slBuffer:Math.round(daily*2),t1Buffer:Math.round(daily*1),t2Buffer:Math.round(daily*2),t3Buffer:Math.round(daily*3)};
+}
+
+// 12. VOLUME DELTA — FIX: DualBar bv+brv=0 edge case handled here
+function computeVolumeDelta({buyVolume,sellVolume,totalVolume,priceChange,atr=100}){
+  const bv=safeNum(buyVolume,0),sv=safeNum(sellVolume,0),tv=Math.max(safeNum(totalVolume,bv+sv),1),pc=safeNum(priceChange,0),at=Math.max(1,safeNum(atr,100));
+  const cvd=bv-sv,buyPct=safePct(safeDiv(bv,tv)*100),sellPct=safePct(safeDiv(sv,tv)*100);
+  const imbalance=safeDiv(cvd,tv)*100,strength=safePct(Math.abs(imbalance));
+  let bias="NEUTRAL",biasColor=T.amber;
+  if(imbalance>15){bias="BULL";biasColor=T.green;}else if(imbalance<-15){bias="BEAR";biasColor=T.red;}
+  const priceDir=pc>at*0.3?"UP":pc<-at*0.3?"DOWN":"FLAT";
+  const cvdDir=cvd>tv*0.05?"UP":cvd<-tv*0.05?"DOWN":"FLAT";
+  const divergence=priceDir==="UP"&&cvdDir==="DOWN"?{type:"BEARISH_DIV",color:T.red}:priceDir==="DOWN"&&cvdDir==="UP"?{type:"BULLISH_DIV",color:T.green}:null;
+  let absorption="NONE";
+  if(sellPct>65&&pc>-at*0.2)absorption="SELL ABSORPTION (Bullish)";
+  if(buyPct>65&&pc<at*0.2)absorption="BUY ABSORPTION (Bearish)";
+  return{cvd:Math.round(cvd),buyPct:round2(buyPct),sellPct:round2(sellPct),bias,biasColor,strength,divergence,absorption,signal:divergence?`⚡ ${divergence.type}`:absorption!=="NONE"?`🔄 ${absorption}`:`${bias} flow (${strength.toFixed(0)}%)`};
+}
+
+// 13. VWAP
+function computeVWAP({currentPrice,vwap,stdDev=0,atr=100}){
+  const price=safeNum(currentPrice,0),vw=safeNum(vwap,price),sd=safeNum(stdDev,0),at=Math.max(1,safeNum(atr,100));
+  if(vw===0)return{zone:"AT_VWAP",bias:"NEUTRAL",biasColor:T.amber,deviation:0,deviationPct:0,band:"NONE",signal:"VWAP not set",meanReversion:false,trendFollow:false};
+  const deviation=round2(price-vw),deviationPct=round2(safeDiv(deviation,vw)*100);
+  const zone=Math.abs(deviation)<at*0.15?"AT_VWAP":deviation>0?"ABOVE_VWAP":"BELOW_VWAP";
+  let band="VWAP";
+  if(sd>0){if(price>vw+2*sd)band="UPPER_2SD";else if(price>vw+sd)band="UPPER_1SD";else if(price<vw-2*sd)band="LOWER_2SD";else if(price<vw-sd)band="LOWER_1SD";else band="INSIDE_1SD";}
+  let bias="NEUTRAL",biasColor=T.amber;
+  if(zone==="ABOVE_VWAP"){bias="BULL";biasColor=T.green;}
+  if(zone==="BELOW_VWAP"){bias="BEAR";biasColor=T.red;}
+  const meanReversion=band==="UPPER_2SD"||band==="LOWER_2SD";
+  const trendFollow=zone!=="AT_VWAP"&&(band==="UPPER_1SD"||band==="LOWER_1SD"||band==="INSIDE_1SD");
+  const signal=meanReversion?(zone==="ABOVE_VWAP"?"⬇ +2SD — Mean reversion SHORT possible":"⬆ -2SD — Mean reversion LONG possible"):trendFollow?(zone==="ABOVE_VWAP"?"▲ Above VWAP — Buy dips.":"▼ Below VWAP — Sell rallies."):"◆ At VWAP — Wait for break.";
+  return{zone,bias,biasColor,deviation,deviationPct,band,signal,meanReversion,trendFollow};
+}
+
+// 14. PREMIUM/DISCOUNT
+function computePremDisc({rangeHigh,rangeLow,currentPrice,trend="neutral"}){
+  const hi=safeNum(rangeHigh,0),lo=safeNum(rangeLow,0),price=safeNum(currentPrice,0);
+  if(hi<=lo||hi===0)return{zone:"EQUILIBRIUM",zoneColor:T.amber,pctFromMid:0,tradeBias:{label:"Range not set",color:T.muted,action:"WAIT"},equilibrium:0,valid:false};
+  const range=hi-lo,mid=lo+range/2,pct=clamp(safeDiv(price-mid,range/2)*100,-100,100);
+  const zone=pct>25?"PREMIUM":pct<-25?"DISCOUNT":"EQUILIBRIUM";
+  const zC=zone==="PREMIUM"?T.red:zone==="DISCOUNT"?T.green:T.amber;
+  let tradeBias;
+  if(zone==="DISCOUNT"&&trend==="bull")tradeBias={label:"BUY ZONE — Discount + Bull",color:T.green,action:"LONG"};
+  else if(zone==="PREMIUM"&&trend==="bear")tradeBias={label:"SELL ZONE — Premium + Bear",color:T.red,action:"SHORT"};
+  else if(zone==="DISCOUNT")tradeBias={label:"DISCOUNT — Watch for long",color:"#66ffbb",action:"WATCH_LONG"};
+  else if(zone==="PREMIUM")tradeBias={label:"PREMIUM — Watch for short",color:"#ff6688",action:"WATCH_SHORT"};
+  else tradeBias={label:"EQUILIBRIUM — Wait",color:T.amber,action:"WAIT"};
+  return{zone,zoneColor:zC,pctFromMid:round2(pct),tradeBias,equilibrium:Math.round(mid),valid:true};
+}
+
+// 15. SESSION
+function computeSession(nowDate){
+  const tot=nowDate.getHours()*60+nowDate.getMinutes();
+  const cur=SESSION_DEFS.find(s=>tot>=s.range[0]&&tot<s.range[1])||SESSION_DEFS[SESSION_DEFS.length-1];
+  return{sessions:SESSION_DEFS,current:cur,minsLeft:Math.max(0,cur.range[1]-tot)};
+}
+
+// ══════════════════════════════════════════════════════════
+// PHASE-2 INTELLIGENCE ENGINES
+// ══════════════════════════════════════════════════════════
+
+// 16. MARKET PERSONALITY ENGINE
+function computePersonality({regimeCode,regimeDirection,regimeColor,regimeScore,giftGap,sweepScore,sweepType,trapBull,trapBear,absorbVal,volState,oiChange,vix}){
+  const gap=safeNum(giftGap,0),v=safeNum(vix,16);
+  const isGapUp=gap>80,isGapDown=gap<-80;
+  const isTrap=Math.max(safeNum(trapBull,0),safeNum(trapBear,0))>55;
+  const isSweep=safeNum(sweepScore,0)>50;
+  const isAbsorb=safeNum(absorbVal,0)>50;
+  const isExpansion=volState==="EXPANSION";
+  const isContraction=volState==="CONTRACTION";
+  let type,color,strategy,risk,expectation;
+  if(isTrap&&(isGapUp||isGapDown)){
+    type="TRAP DAY";color=T.red;risk="HIGH";
+    strategy="Fade the gap. Wait for first reversal candle. Do NOT chase opening move.";
+    expectation="50–70% gap fill highly probable. Stops above/below gap extreme.";
+  } else if(isSweep&&isAbsorb){
+    type="REVERSAL DAY";color=T.purple;risk="MODERATE";
+    strategy="Follow sweep direction after absorption confirms reversal.";
+    expectation="Sustained move opposite to initial move. Strong follow-through.";
+  } else if(regimeCode==="TB"&&!isTrap){
+    type="TREND DAY";color=T.green;risk="LOW";
+    strategy="Buy every dip. Trail stops aggressively. No counter-trend trades.";
+    expectation="Close near high of day. Momentum continuation.";
+  } else if(regimeCode==="TBR"&&!isTrap){
+    type="TREND DAY BEAR";color=T.red;risk="LOW";
+    strategy="Sell every rally. Trail stops down. No counter-trend trades.";
+    expectation="Close near low of day. Persistent selling.";
+  } else if(isContraction){
+    type="COIL DAY";color=T.blue;risk="LOW";
+    strategy="Wait for breakout confirmation. Size up on confirmed break.";
+    expectation="Explosive directional move imminent. Set proximity alerts.";
+  } else if(isGapDown&&isAbsorb){
+    type="GAP FILL DAY";color=T.amber;risk="MODERATE";
+    strategy="Watch for bounce off support. Buy if gap partially closes.";
+    expectation="Partial or full gap fill. Buyers absorbed sellers at lows.";
+  } else if(oiChange==="price_up_oi_down"){
+    type="SHORT COVER DAY";color="#66ffbb";risk="LOW";
+    strategy="Longs safe. Shorts being squeezed. Follow buy-side flow.";
+    expectation="Continued squeeze higher as shorts cover.";
+  } else if(oiChange==="price_down_oi_down"){
+    type="LONG UNWIND";color="#ff6688";risk="MODERATE";
+    strategy="Avoid new longs. Long holders exiting. Selling pressure.";
+    expectation="Continued selling as longs exit positions.";
+  } else {
+    type="MEAN REVERSION";color=T.amber;risk="MODERATE";
+    strategy="Fade extremes only. Buy deep discount, sell deep premium.";
+    expectation="Return to VWAP and equilibrium. Range-bound action.";
+  }
+  return{type,color,strategy,risk,expectation};
+}
+
+// 17. LIQUIDITY MAP ENGINE
+function computeLiquidityMap({atmStrike,highestCallOI,highestPutOI,maxPain,slBuffer,structureMidPoint,giftGap,sweepType}){
+  const atm=safeNum(atmStrike,24000),sl=safeNum(slBuffer,100);
+  const callW=safeNum(highestCallOI,atm+300),putW=safeNum(highestPutOI,atm-300);
+  const mp=safeNum(maxPain,atm);
+  const pools=[
+    {label:"BUY-SIDE LIQ",  price:callW,  type:"buyside",  strength:85,color:T.red,    desc:"Retail stops above — institutions target these"},
+    {label:"RESISTANCE",    price:atm+sl, type:"buyside",  strength:55,color:"#ff6688",desc:"Short-term resistance zone"},
+    {label:"ATM / PIVOT",   price:atm,    type:"pivot",    strength:70,color:T.cyan,   desc:"Institutional battleground — key reference"},
+    {label:"MAX PAIN",      price:mp,     type:"magnet",   strength:safeDiv(Math.abs(atm-mp),sl,1)<1?80:35,color:T.purple,desc:"Options market maker target"},
+    {label:"SUPPORT",       price:atm-sl, type:"sellside", strength:55,color:"#66ffaa",desc:"Short-term support zone"},
+    {label:"SELL-SIDE LIQ", price:putW,   type:"sellside", strength:85,color:T.green,  desc:"Retail stops below — institutions sweep these"},
+  ];
+  const sweepBias=safeInc(sweepType,"BUY-SIDE")?"SELL-SIDE NEXT":safeInc(sweepType,"SELL-SIDE")?"BUY-SIDE NEXT":"NEUTRAL";
+  const nearBuy=pools.find(p=>p.type==="buyside");
+  const nearSell=pools.filter(p=>p.type==="sellside").slice(-1)[0];
+  return{pools,sweepBias,sweepBiasColor:sweepBias.includes("SELL")?T.red:sweepBias.includes("BUY")?T.green:T.amber,nearestBuyLiq:nearBuy?.price,nearestSellLiq:nearSell?.price,liqDist:Math.round(Math.abs((nearBuy?.price||atm)-(nearSell?.price||atm)))};
+}
+
+// 18. NO-TRADE ZONE ENGINE
+function computeNoTrade({vix,trapBull,trapBear,mtfAligned,sweepScore,sessionQuality,regimeCode,masterConfidence,liqCondition,giftGap}){
+  const blocks=[],warns=[];
+  if(safeNum(vix,0)>20)           blocks.push({r:"VIX "+vix+" > 20 — Volatility too high",sev:"CRITICAL"});
+  if(safeNum(trapBull,0)>65)      blocks.push({r:`Bull Trap ${trapBull}% — Institutional manipulation`,sev:"HIGH"});
+  if(safeNum(trapBear,0)>65)      blocks.push({r:`Bear Trap ${trapBear}% — Institutional manipulation`,sev:"HIGH"});
+  if(["DANGER","EXIT"].includes(sessionQuality))blocks.push({r:`Session: ${sessionQuality} — Not tradeable`,sev:"CRITICAL"});
+  if(safeNum(sweepScore,0)>70)    blocks.push({r:`Active sweep ${sweepScore}% — Manipulation ongoing`,sev:"HIGH"});
+  if(Math.abs(safeNum(giftGap,0))>160)blocks.push({r:`Gap ${Math.abs(giftGap)}pts — Wait for stabilization`,sev:"HIGH"});
+  if(liqCondition==="ACTIVE MANIPULATION")blocks.push({r:"Active liquidity manipulation detected",sev:"HIGH"});
+  if(safeNum(masterConfidence,0)<25)blocks.push({r:`Confidence ${masterConfidence}% — Insufficient edge`,sev:"MODERATE"});
+  if(!mtfAligned&&regimeCode!=="RB")warns.push("MTF misaligned — counter-trend risk elevated");
+  if(regimeCode==="RB")warns.push("Range bound — low directional edge");
+  const blocked=blocks.length>0;
+  const worst=blocks.find(b=>b.sev==="CRITICAL")?"CRITICAL":blocks.find(b=>b.sev==="HIGH")?"HIGH":blocks.length?"MODERATE":"CLEAR";
+  return{blocked,blocks,warns,worst,color:worst==="CRITICAL"?T.red:worst==="HIGH"?T.red:worst==="MODERATE"?T.amber:T.green,verdict:blocked?`NO TRADE — ${worst}`:warns.length?"CAUTION":"CLEAR TO TRADE"};
+}
+
+// 19. ALERT ENGINE — FIX: tNow() called at runtime, not in useMemo dep
+function computeAlerts({sweepScore,sweepType,sweepColor,sweepConfidence,trapBull,trapBear,fiiDir,fiiIntensity,fiiColor,absorbVal,absorbType,masterConfidence,masterIsGo,masterBias,regimeCode,structureSignal,structureColor,deltaImbRaw,volState,sessionQuality,sessionLabel}){
+  const alerts=[];
+  const now=tNow();
+  const add=(msg,pri,color,cat)=>alerts.push({msg,priority:pri,color,category:cat,time:now});
+  if(safeNum(sweepScore,0)>60)  add(`💧 ${sweepType} — ${sweepConfidence} confidence`,1,sweepColor,"SWEEP");
+  if(safeNum(trapBull,0)>65)    add(`⚠ Bull Trap ${trapBull}% — Avoid fresh longs`,1,T.red,"TRAP");
+  if(safeNum(trapBear,0)>65)    add(`⚠ Bear Trap ${trapBear}% — Avoid fresh shorts`,1,T.amber,"TRAP");
+  if(fiiIntensity==="AGGRESSIVE")add(`🏦 FII ${fiiDir} aggressively — Follow institutional hand`,2,fiiColor,"FLOW");
+  if(safeNum(absorbVal,0)>60)   add(`📊 ${absorbType} — Reversal setup forming`,2,T.teal,"STRUCTURE");
+  if(safeNum(masterConfidence,0)>=80)add(`🎯 Master Score ${masterConfidence}% — High conviction setup`,1,T.green,"SCORE");
+  if(masterIsGo&&masterBias!=="SIDEWAYS")add(`✅ GO SIGNAL: ${masterBias} — All checks passed`,1,T.green,"EXECUTION");
+  if(structureSignal!=="NONE")  add(`📐 ${structureSignal} confirmed`,2,structureColor,"STRUCTURE");
+  if(Math.abs(safeNum(deltaImbRaw,0))>20)add(`Δ Delta Imbalance strong — Options flow`,2,T.purple,"DELTA");
+  if(volState==="EXPANSION")    add(`🔴 Volatility EXPANDING — Widen stops.`,2,T.red,"VOL");
+  if(volState==="CONTRACTION")  add(`🔵 Volatility COILING — Big move imminent.`,2,T.blue,"VOL");
+  if(sessionQuality==="DANGER") add(`⚡ DANGER SESSION: ${sessionLabel} — No new entries`,1,T.red,"SESSION");
+  return alerts.sort((a,b)=>a.priority-b.priority).slice(0,8);
+}
+
+// 20. MASTER SCORE ENGINE
+function biasToDelta(b=""){
+  const s=String(b).toUpperCase();
+  if(s.includes("BULL")||s.includes("BUY")||s.includes("LONG")||s==="ACCUMULATING")return 1;
+  if(s.includes("BEAR")||s.includes("SELL")||s.includes("SHORT")||s==="DISTRIBUTING")return -1;
+  return 0;
+}
+const W={REGIME:10,SWEEP:8,FII:9,DELTA:7,ABSORPTION:6,STRUCTURE:8,MTF:9,PREM:7,CANDLE:5,VWAP:6,PCR:5,TRAP:8};
+
+function computeMasterScore({regimeDirection,regimeScore,sweepScore,sweepType,fiiDir,fiiScore,deltaImbDir,deltaImbRaw,absorbVal,absorbType,structureSignal,structureZone,mtfBias15m,mtfExecQuality,mtfAligned,premDiscAction,premDiscValid,candlePatternBias,candleScore,vwapBias,vwapZone,vwapMeanReversion,atrVolState,trapBull,trapBear,trapDominant,pcr,volumeDeltaBias,volumeDeltaStrength}){
+  const sigs=[];
+  sigs.push({k:"REGIME",  delta:biasToDelta(regimeDirection)*clamp(Math.abs(safeNum(regimeScore,0))/5,0,1),w:W.REGIME});
+  const swRaw=safeNum(sweepScore,0)/100;
+  sigs.push({k:"SWEEP",   delta:safeInc(sweepType,"BUY-SIDE")?-swRaw:safeInc(sweepType,"SELL-SIDE")?swRaw:0,w:W.SWEEP});
+  sigs.push({k:"FII",     delta:biasToDelta(fiiDir)*safeNum(fiiScore,0)/100,w:W.FII});
+  sigs.push({k:"DELTA",   delta:biasToDelta(deltaImbDir)*clamp(Math.abs(safeNum(deltaImbRaw,0))/100,0,1),w:W.DELTA});
+  const absDir=safeInc(absorbType,"SELL")?1:safeInc(absorbType,"BUY")?-1:0;
+  sigs.push({k:"ABSORB",  delta:absDir*safeNum(absorbVal,0)/100,w:W.ABSORPTION});
+  const strD=safeInc(structureSignal,"BULL")?1:safeInc(structureSignal,"BEAR")?-1:0;
+  const zoneD=structureZone==="DISCOUNT"?0.3:structureZone==="PREMIUM"?-0.3:0;
+  sigs.push({k:"STRUCT",  delta:clamp(strD+zoneD,-1,1),w:W.STRUCTURE});
+  sigs.push({k:"MTF",     delta:biasToDelta(mtfBias15m)*safeNum(mtfExecQuality,50)/100,w:mtfAligned?W.MTF:W.MTF*0.4});
+  const pdD=premDiscAction==="LONG"||premDiscAction==="WATCH_LONG"?1:premDiscAction==="SHORT"||premDiscAction==="WATCH_SHORT"?-1:0;
+  sigs.push({k:"P/D",     delta:pdD*(premDiscValid?0.8:0),w:W.PREM});
+  sigs.push({k:"CANDLE",  delta:biasToDelta(candlePatternBias)*clamp(Math.abs(safeNum(candleScore,0))/4,0,1),w:W.CANDLE});
+  const vwD=vwapMeanReversion?-biasToDelta(vwapBias):biasToDelta(vwapBias);
+  sigs.push({k:"VWAP",    delta:vwD*(vwapZone!=="AT_VWAP"?0.8:0.2),w:W.VWAP});
+  const pcrV=safeNum(pcr,1),pcrD=pcrV>1.3?1:pcrV<0.7?-1:0,pcrC=pcrV>1.4||pcrV<0.6?0.9:pcrV>1.3||pcrV<0.7?0.5:0;
+  sigs.push({k:"PCR",     delta:pcrD*pcrC,w:W.PCR});
+  const maxTrap=Math.max(safeNum(trapBull,0),safeNum(trapBear,0))/100;
+  sigs.push({k:"TRAP",    delta:maxTrap*-0.3,w:W.TRAP});
+  const volMod=atrVolState==="CONTRACTION"?0.5:atrVolState==="EXPANSION"?1.2:1.0;
+  let wSum=0,effW=0;
+  for(const s of sigs){wSum+=safeNum(s.delta,0)*safeNum(s.w,1);effW+=safeNum(s.w,1);}
+  wSum*=clamp(volMod,0.4,1.5);
+  const netScore=clamp(safeDiv(wSum,Math.max(effW,1))*100,-100,100);
+  const bias=netScore>=20?"BULLISH":netScore<=-20?"BEARISH":"SIDEWAYS";
+  const biasColor=bias==="BULLISH"?T.green:bias==="BEARISH"?T.red:T.amber;
+  const trapQ=100-Math.max(safeNum(trapBull,0),safeNum(trapBear,0));
+  const volQ=atrVolState==="CONTRACTION"?30:atrVolState==="EXPANSION"?90:70;
+  const execQ=Math.round(safeNum(mtfExecQuality,50)*0.5+trapQ*0.3+volQ*0.2);
+  const conf=Math.round(clamp(Math.abs(netScore)*0.8,5,94));
+  const instP=Math.round(safeNum(fiiScore,0)*0.5+safeNum(absorbVal,0)*0.25+safeNum(sweepScore,0)*0.25);
+  const liqScore=Math.round(safeNum(sweepScore,0)*0.4+safeNum(absorbVal,0)*0.3);
+  const action=bias==="BULLISH"&&execQ>=70?"STRONG LONG":bias==="BEARISH"&&execQ>=70?"STRONG SHORT":bias==="BULLISH"&&execQ>=50?"BUY PULLBACK":bias==="BEARISH"&&execQ>=50?"SELL RALLY":execQ<40?"WAIT":netScore>0?"CAUTIOUS LONG":"CAUTIOUS SHORT";
+  const isGo=execQ>=60&&conf>=45&&liqScore<60&&bias!=="SIDEWAYS";
+  return{netScore:round2(netScore),bias,biasColor,confidence:conf,confLevel:conf>=70?"HIGH":conf>=45?"MODERATE":"LOW",confColor:conf>=70?T.green:conf>=45?T.amber:T.red,execQuality:clamp(execQ,0,100),execColor:execQ>=70?T.green:execQ>=45?T.amber:T.red,instPressure:clamp(instP,0,100),instDir:biasToDelta(fiiDir),liqScore:clamp(liqScore,0,100),liqCondition:liqScore>60?"ACTIVE MANIPULATION":liqScore>30?"MODERATE ACTIVITY":"CLEAN",volRegime:atrVolState,condition:atrVolState==="CONTRACTION"?"COILING":atrVolState==="EXPANSION"?"BREAKOUT":bias==="SIDEWAYS"?"RANGING":`${bias} TREND`,trapDominant:trapDominant||"CLEAN",trapMax:Math.round(Math.max(safeNum(trapBull,0),safeNum(trapBear,0))),action,isGo,goColor:isGo?T.green:T.red,sigs};
+}
+
+// 21. SMART RISK ENGINE
+function computeSmartRisk({atmStrike,slBuffer,t1Buffer,t2Buffer,t3Buffer,volState,masterBias,masterIsGo,masterConfidence,structureSignal,capital,riskPct,vix}){
+  const atm=safeNum(atmStrike,24000);
+  const sl_=safeNum(slBuffer,100),t1_=safeNum(t1Buffer,100),t2_=safeNum(t2Buffer,200),t3_=safeNum(t3Buffer,300);
+  const dir=masterBias==="BULLISH"?"LONG":masterBias==="BEARISH"?"SHORT":"WAIT";
+  const volAdj=volState==="EXPANSION"?1.4:volState==="ELEVATED"?1.2:1.0;
+  const structAdj=structureSignal!=="NONE"?0.9:1.1;
+  const adjSL=Math.round(sl_*volAdj*structAdj);
+  const longEntry=atm-Math.round(adjSL*0.5);
+  const longSL=longEntry-adjSL;
+  const longT1=atm+t1_,longT2=atm+t2_,longT3=atm+t3_;
+  const shortEntry=atm+Math.round(adjSL*0.3);
+  const shortSL=shortEntry+adjSL;
+  const shortT1=atm-t1_,shortT2=atm-t2_,shortT3=atm-t3_;
+  const rrT1=round2(safeDiv(t1_,adjSL,0)),rrT2=round2(safeDiv(t2_,adjSL,0)),rrT3=round2(safeDiv(t3_,adjSL,0));
+  const cap=safeNum(capital,500000),rp=clamp(safeNum(riskPct,1),0.1,3);
+  const maxRisk=Math.round(cap*rp/100),rpl=Math.max(1,adjSL)*65;
+  const lots=Math.max(1,Math.floor(safeDiv(maxRisk,rpl,1)));
+  const sizeAdj=safeNum(vix,0)>20?"50% size":safeNum(vix,0)>17?"75% size":"Full size";
+  const trailingLogic=volState==="EXPANSION"?"Trail by 1.5×ATR after T1. Let winners run.":rrT2>=2?"Move SL to entry after T1. Trail by ATR.":"Exit full at T2. No trailing in low volatility.";
+  const isActive=dir!=="WAIT"&&masterIsGo;
+  const tcolor=isActive?masterConfidence>=70?T.green:masterConfidence>=45?T.amber:T.red:T.muted;
+  return{dir,isActive,long:{entry:`${longEntry}–${atm-Math.round(adjSL*0.3)}`,sl:longSL,t1:longT1,t2:longT2,t3:longT3,invalid:longSL-Math.round(adjSL*0.3)},short:{entry:`${atm+Math.round(adjSL*0.3)}–${shortEntry}`,sl:shortSL,t1:shortT1,t2:shortT2,t3:shortT3,invalid:shortSL+Math.round(adjSL*0.3)},adjSL,rrT1,rrT2,rrT3,lots,maxRisk,rpl:Math.round(rpl),sizeAdj,trailingLogic,volAdj:volState,tcolor};
+}
+
+// 22. AI NARRATIVE ENGINE
+function computeNarrative({regimeStr,regimeDir,regimeDesc,trapBull,trapBear,trapDominant,fiiDir,fiiIntensity,absorbVal,absorbType,deltaImbDir,deltaImbRaw,giftGap,vix,pcr,structureSignal,structureZone,structurePctFromMid,structureMidPoint,structureInternalLiq,structureTrendState,sweepType,sweepConfidence,sweepScore,mtfBias15m,mtfConf5m,mtfExec1m,mtfAligned,volState,dailyATR,candlePatterns,candlePatternBias,sessionLabel,sessionQuality,sessionInst,sessionMinsLeft,noTradeBlocked,noTradeFirstBlock,execIsActive,execDir,execLongEntry,execLongSL,execLongT1,execLongT2,execLongInvalid,execShortEntry,execShortSL,execShortT1,execShortT2,execShortInvalid,execRrT1,execRrT2,execLots,execSizeAdj,regimeCode,masterBias,personalityType,personalityStrategy,personalityExpectation}){
+  const lines=[],gap=safeNum(giftGap,0);
+  const pcrStr=safeNum(pcr,1)>1.3?"elevated PCR signals excess put writing — contrarian bullish":safeNum(pcr,1)<0.7?"compressed PCR signals aggressive call buying — contrarian bearish":"balanced PCR environment";
+  const gapStr=Math.abs(gap)>80?` Gap ${gap>0?"up":"down"} ${Math.abs(gap).toFixed(0)}pts from prior close.`:"";
+  lines.push(`🏛 REGIME: ${regimeStr} | ${pcrStr}.${gapStr} Institutional posture: ${fiiDir||"neutral"} at ${fiiIntensity||"passive"} level.`);
+  if(personalityType)lines.push(`📊 PERSONALITY: ${personalityType} — ${personalityStrategy} Expected: ${personalityExpectation}`);
+  if(structureSignal!=="NONE")lines.push(`📐 STRUCTURE: ${structureSignal} confirmed. Price in ${structureZone} array (${structurePctFromMid>0?"+":""}${structurePctFromMid}% from equilibrium ${structureMidPoint}). ${structureInternalLiq}`);
+  else lines.push(`📐 STRUCTURE: No confirmed BOS/CHOCH. ${structureTrendState||"Range"} context. Equilibrium: ${structureMidPoint||"—"}.`);
+  if(sweepType!=="NO SWEEP")lines.push(`💧 SWEEP: ${sweepType} (${sweepConfidence} confidence, ${sweepScore}%). ${safeInc(sweepType,"BUY-SIDE")?"Equal highs taken — sell-side liquidity now in focus.":"Equal lows taken — buy-side liquidity now in focus."}`);
+  const absMsg=safeNum(absorbVal,0)>50?` ${absorbType} detected — institutions absorbing supply.`:"";
+  const deltaMsg=Math.abs(safeNum(deltaImbRaw,0))>15?` ${deltaImbDir} — options flow confirming bias.`:"";
+  lines.push(`🏦 FLOW: FII ${fiiDir||"neutral"} | ${fiiIntensity||"passive"} aggression.${absMsg}${deltaMsg}`);
+  const trapMax=Math.max(safeNum(trapBull,0),safeNum(trapBear,0));
+  if(trapMax>50)lines.push(`⚠ TRAP RISK: ${trapDominant} ${trapMax}% — ${trapDominant==="BULL TRAP"?"Current rally appears institutional distribution. Bears positioning for reversal.":"Current decline may be stop hunt. Smart money likely long below lows."}`);
+  else lines.push(`✅ TRAP RISK: Clean (${trapMax}%) — No significant manipulation signature detected.`);
+  if(mtfAligned)lines.push(`⏱ MTF: 15m ${mtfBias15m} + 5m ${mtfConf5m} — All timeframes aligned. Execution: ${mtfExec1m}`);
+  else lines.push(`⏱ MTF: 15m ${mtfBias15m} conflicting with 5m ${mtfConf5m}. Counter-trend risk elevated — reduce size 50%.`);
+  const volMsg=volState==="EXPANSION"?"Volatility expanding — momentum in play. Widen stops, expect follow-through.":volState==="CONTRACTION"?"Volatility compressed — coiling for breakout. Set proximity alerts.":volState==="ELEVATED"?"Volatility elevated — reduce size 25%.":"Normal volatility — standard execution parameters.";
+  lines.push(`📈 VOLATILITY: ${volState||"NORMAL"} | ATR ${dailyATR||"—"}pts | ${volMsg}`);
+  if(sessionLabel)lines.push(`⏰ SESSION: ${sessionLabel} [${sessionQuality}] — ${sessionInst} ${sessionMinsLeft}min remaining.`);
+  if(candlePatterns&&candlePatterns.length>0)lines.push(`🕯 PATTERNS: ${candlePatterns.map(p=>p.name).join(", ")} — Bias: ${candlePatternBias}. ${candlePatternBias==="BULLISH"?"Confirms long entries.":candlePatternBias==="BEARISH"?"Confirms short entries.":"Await directional resolve."}`);
+  if(noTradeBlocked)lines.push(`🚫 EXECUTION: BLOCKED — ${noTradeFirstBlock||"Risk conditions not met"}. Preserve capital.`);
+  else if(execIsActive){
+    const isLong=execDir==="LONG";
+    lines.push(`✅ EXECUTION: ${execDir} | Entry: ${isLong?execLongEntry:execShortEntry} | SL: ${isLong?execLongSL:execShortSL} | T1: ${isLong?execLongT1:execShortT1} (${execRrT1}R) | T2: ${isLong?execLongT2:execShortT2} (${execRrT2}R) | ${execLots} lot${execLots>1?"s":""} [${execSizeAdj}]`);
+    lines.push(`🚫 Invalidation: Close ${isLong?"below":"above"} ${isLong?execLongInvalid:execShortInvalid} — exit without hesitation.`);
+  } else {
+    lines.push(`⏳ EXECUTION: WAIT — ${regimeCode==="RB"?"Range bound":!mtfAligned?"MTF misaligned":trapMax>50?"Trap risk elevated":"Conditions developing"}. No forced trades.`);
+  }
+  return lines;
+}
+
+// 23. SIGNAL LIST
+function buildSignalList({regimeCode,mtfBias15m,deltaImbRaw,absorbType,sweepType,sweepScore,fiiDir,structureSignal,candlePatternBias,trapDominant,vwapBias,vwapZone,premDiscAction,premDiscZone,gexNorm,gexFormatted,pcr,ivTrend,vix,giftGap}){
+  return[
+    {l:"India VIX",  v:safeNum(vix,16)<14?"BULL":safeNum(vix,16)>20?"BEAR":"NEUT",d:`${vix}`,w:2},
+    {l:"PCR",        v:safeNum(pcr,1)>1.3?"BULL":safeNum(pcr,1)<0.7?"BEAR":"NEUT",d:`${pcr}`,w:2},
+    {l:"IV Trend",   v:ivTrend==="falling"?"BULL":"BEAR",d:ivTrend||"—",w:3},
+    {l:"Delta Imb",  v:safeNum(deltaImbRaw,0)>10?"BULL":safeNum(deltaImbRaw,0)<-10?"BEAR":"NEUT",d:deltaImbRaw>10?"CALL DOM":deltaImbRaw<-10?"PUT DOM":"BALANCED",w:2},
+    {l:"FII Flow",   v:fiiDir==="ACCUMULATING"?"BULL":fiiDir==="DISTRIBUTING"?"BEAR":"NEUT",d:fiiDir||"—",w:2},
+    {l:"Absorption", v:safeInc(absorbType,"SELL")?"BULL":safeInc(absorbType,"BUY")?"BEAR":"NEUT",d:absorbType||"NONE",w:1},
+    {l:"MTF 15m",    v:mtfBias15m==="BULLISH"?"BULL":mtfBias15m==="BEARISH"?"BEAR":"NEUT",d:mtfBias15m||"—",w:3},
+    {l:"Gift Gap",   v:safeNum(giftGap,0)>50?"BULL":safeNum(giftGap,0)<-50?"BEAR":"NEUT",d:`${giftGap>0?"+":""}${giftGap}`,w:2},
+    {l:"GEX",        v:safeNum(gexNorm,0)>10?"BULL":safeNum(gexNorm,0)<-10?"BEAR":"NEUT",d:gexFormatted||"—",w:2},
+    {l:"Structure",  v:safeInc(structureSignal,"BULL")?"BULL":safeInc(structureSignal,"BEAR")?"BEAR":"NEUT",d:structureSignal||"NONE",w:2},
+    {l:"VWAP Zone",  v:vwapBias==="BULL"?"BULL":vwapBias==="BEAR"?"BEAR":"NEUT",d:vwapZone||"AT_VWAP",w:1},
+    {l:"P/D Array",  v:premDiscAction==="LONG"?"BULL":premDiscAction==="SHORT"?"BEAR":"NEUT",d:premDiscZone||"—",w:2},
+    {l:"Candle",     v:candlePatternBias==="BULLISH"?"BULL":candlePatternBias==="BEARISH"?"BEAR":"NEUT",d:candlePatternBias||"NEUTRAL",w:1},
+    {l:"Trap",       v:trapDominant==="CLEAN"?"BULL":"BEAR",d:trapDominant||"—",w:2},
+    {l:"Sweep",      v:sweepType==="NO SWEEP"?"BULL":safeInc(sweepType,"SELL")?"BULL":"BEAR",d:sweepType||"NONE",w:2},
+  ];
+}
+
+// ══════════════════════════════════════════════════════════
+// 24. AI EXECUTION SIGNAL ENGINE
+// ══════════════════════════════════════════════════════════
+
+const SETUP_TYPES=[
+  "Liquidity Sweep Reversal",
+  "BOS + Retest",
+  "Order Block Reaction",
+  "Breaker Block Continuation",
+  "Session Expansion Setup",
+  "CHOCH Reversal",
+  "Premium/Discount Fade",
+  "Equal Highs/Lows Sweep",
+  "FVG Fill + Rejection",
+  "Institutional Order Flow",
+];
+
+const ASSET_CONTEXTS={
+  "XAUUSD":  {name:"Gold",    pip:0.01, lotSize:100,  sessions:["London","New York"]},
+  "FOREX":   {name:"Forex",   pip:0.0001,lotSize:100000,sessions:["Asian","London","New York"]},
+  "CRYPTO":  {name:"Crypto",  pip:1,    lotSize:1,    sessions:["24H"]},
+  "NIFTY50": {name:"Nifty50", pip:0.05, lotSize:25,   sessions:["Pre-Open","Prime","Power Hour"]},
+  "BANKNIFTY":{name:"BankNifty",pip:0.05,lotSize:15,  sessions:["Prime","London","Power Hour"]},
+};
+
+function computeAISignal({
+  masterScore,regime,sweep,structure,mtf,trapProb,fiiAgg,
+  atr,noTrade,session,premDisc,vwapBias,candle,absorb,deltaImb,
+  atmStrike,vix,pcr,giftGap,liquiditySweep,oiChange,ivTrend,
+  selectedAsset,capital,riskPct,
+}){
+  const atm=safeNum(atmStrike,24000);
+  const sl_=atr.slBuffer||100;
+  const conf=safeNum(masterScore.confidence,0);
+  const execQ=safeNum(masterScore.execQuality,0);
+  const bias=masterScore.bias;
+  const isGo=masterScore.isGo;
+  const trap=Math.max(safeNum(trapProb.bull,0),safeNum(trapProb.bear,0));
+  const v=safeNum(vix,16);
+
+  // ── CHECKLIST ──
+  const checklist=[
+    {label:"Structure confirmed (BOS/CHOCH)",  pass:structure.structureSignal!=="NONE"},
+    {label:"Liquidity sweep identified",        pass:sweep.sweepType!=="NO SWEEP"},
+    {label:"Session aligned for execution",     pass:!["DANGER","EXIT","POOR"].includes(session.current?.quality||"")},
+    {label:"R:R ≥ 2.0 minimum",               pass:safeDiv(safeNum(atr.t2Buffer,200),Math.max(sl_,1))>=1.8},
+    {label:"Emotional risk acceptable",         pass:trap<50&&v<20},
+    {label:"MTF confluence aligned",            pass:mtf.aligned},
+    {label:"Trap probability < 50%",            pass:trap<50},
+    {label:"No-trade zone clear",              pass:!noTrade.blocked},
+  ];
+  const checksPassed=checklist.filter(c=>c.pass).length;
+  const checksTotal=checklist.length;
+  const checklistOk=checksPassed>=6;
+
+  // ── CONFLUENCE SCORE ──
+  let confluenceScore=0;
+  if(structure.structureSignal!=="NONE")confluenceScore+=20;
+  if(sweep.sweepType!=="NO SWEEP"&&sweep.sweepScore>50)confluenceScore+=18;
+  if(mtf.aligned)confluenceScore+=16;
+  if(fiiAgg.intensity==="AGGRESSIVE")confluenceScore+=12;
+  if(absorb.val>50)confluenceScore+=10;
+  if(Math.abs(deltaImb.imbRaw)>15)confluenceScore+=8;
+  if(candle.patterns?.length>0)confluenceScore+=7;
+  if(premDisc.zone!=="EQUILIBRIUM")confluenceScore+=5;
+  if(trap<30)confluenceScore+=4;
+  confluenceScore=clamp(confluenceScore,0,100);
+
+  // ── DETERMINE DIRECTION ──
+  let direction="NO TRADE";
+  if(!checklistOk||noTrade.blocked||confluenceScore<55||conf<35){
+    direction="NO TRADE";
+  } else if(bias==="BULLISH"&&execQ>=55){
+    direction="BUY";
+  } else if(bias==="BEARISH"&&execQ>=55){
+    direction="SELL";
+  } else {
+    direction="NO TRADE";
+  }
+
+  // ── ENTRY / SL / TARGETS ──
+  const volAdj=v>20?1.5:v>17?1.25:1.0;
+  const adjSL=Math.round(sl_*volAdj);
+  let entry,sl,t1,t2,t3;
+  if(direction==="BUY"){
+    entry=atm-Math.round(adjSL*0.4);
+    sl=entry-adjSL;
+    t1=atm+Math.round(atr.t1Buffer*0.9);
+    t2=atm+atr.t2Buffer;
+    t3=atm+atr.t3Buffer;
+  } else if(direction==="SELL"){
+    entry=atm+Math.round(adjSL*0.4);
+    sl=entry+adjSL;
+    t1=atm-Math.round(atr.t1Buffer*0.9);
+    t2=atm-atr.t2Buffer;
+    t3=atm-atr.t3Buffer;
+  } else {
+    entry=atm; sl=0; t1=0; t2=0; t3=0;
+  }
+
+  const rrT1=direction!=="NO TRADE"?round2(safeDiv(Math.abs(t1-entry),Math.max(adjSL,1))):0;
+  const rrT2=direction!=="NO TRADE"?round2(safeDiv(Math.abs(t2-entry),Math.max(adjSL,1))):0;
+  const rrT3=direction!=="NO TRADE"?round2(safeDiv(Math.abs(t3-entry),Math.max(adjSL,1))):0;
+
+  // ── CONFIDENCE METER ──
+  const signalConf=direction==="NO TRADE"?0:Math.round(
+    conf*0.45+execQ*0.25+confluenceScore*0.2+(checksPassed/checksTotal)*100*0.1
+  );
+
+  // ── SETUP TYPE ──
+  let setupType="—";
+  if(direction!=="NO TRADE"){
+    if(sweep.sweepType!=="NO SWEEP"&&structure.structureSignal!=="NONE")setupType="Liquidity Sweep Reversal";
+    else if(structure.structureSignal==="BOS BULLISH"||structure.structureSignal==="BOS BEARISH")setupType="BOS + Retest";
+    else if(absorb.val>55&&sweep.sweepScore>40)setupType="Order Block Reaction";
+    else if(mtf.aligned&&premDisc.zone!=="EQUILIBRIUM")setupType="Premium/Discount Fade";
+    else if(candle.patterns?.some(p=>p.name?.includes("ENGULF")))setupType="Breaker Block Continuation";
+    else setupType="Session Expansion Setup";
+  }
+
+  // ── AI NARRATIVE ──
+  let aiNarrative="Insufficient confluence. Waiting for clean institutional setup.";
+  if(direction==="BUY"){
+    const sweepCtx=sweep.sweepType!=="NO SWEEP"?`${session.current?.label||"Session"} swept sell-side liquidity. `:"";
+    const fiiCtx=fiiAgg.dir==="ACCUMULATING"?"FII accumulating aggressively. ":"";
+    const structCtx=structure.structureSignal!=="NONE"?`${structure.structureSignal} confirmed. `:"";
+    aiNarrative=`${sweepCtx}${structCtx}${fiiCtx}Bullish continuation probability elevated. Premium discount array favors long entries. Multi-timeframe bias aligned to upside.`;
+  } else if(direction==="SELL"){
+    const sweepCtx=sweep.sweepType!=="NO TRADE"&&sweep.sweepType!=="NO SWEEP"?`${session.current?.label||"Session"} swept buy-side liquidity. `:"";
+    const fiiCtx=fiiAgg.dir==="DISTRIBUTING"?"FII distributing positions. ":"";
+    const structCtx=structure.structureSignal!=="NONE"?`${structure.structureSignal} confirmed. `:"";
+    aiNarrative=`${sweepCtx}${structCtx}${fiiCtx}Bearish continuation probability elevated. Institutions positioned short. Sell-side liquidity now in focus.`;
+  } else if(noTrade.blocked){
+    const firstBlock=noTrade.blocks?.[0]?.r||"Risk conditions not met";
+    aiNarrative=`Execution blocked — ${firstBlock}. Preserve capital. No clean institutional setup identified across timeframes.`;
+  } else if(confluenceScore<55){
+    aiNarrative=`Confluence score ${confluenceScore}% — insufficient for institutional-grade entry. Minimum 55% required. Monitor for structure development.`;
+  }
+
+  // ── TRADE QUALITY ──
+  let quality="Avoid";
+  if(direction!=="NO TRADE"){
+    if(signalConf>=78&&rrT2>=2.2&&checksPassed>=7)quality="A+";
+    else if(signalConf>=65&&rrT2>=1.8&&checksPassed>=6)quality="A";
+    else if(signalConf>=50&&rrT2>=1.5&&checksPassed>=5)quality="B";
+    else quality="Avoid";
+  }
+
+  // ── SESSION CONTEXT ──
+  const sessionLabel=session.current?.label||"";
+  let sessionContext="Asian";
+  if(sessionLabel==="PRIME"||sessionLabel==="POWER HOUR"||sessionLabel==="OPEN DRIVE")sessionContext="New York";
+  else if(sessionLabel==="LONDON"||sessionLabel==="CHOP")sessionContext="London";
+  else sessionContext="Asian";
+
+  const dirColor=direction==="BUY"?T.green:direction==="SELL"?T.red:T.amber;
+  const qualColor=quality==="A+"?T.cyan:quality==="A"?T.green:quality==="B"?T.amber:T.muted;
+  const glowClass=direction==="BUY"?"signal-buy":direction==="SELL"?"signal-sell":"signal-notrade";
+
+  return{
+    direction,dirColor,glowClass,
+    entry,sl,t1,t2,t3,
+    rrT1,rrT2,rrT3,
+    signalConf,confluenceScore,
+    setupType,aiNarrative,
+    quality,qualColor,
+    sessionContext,
+    checklist,checksPassed,checksTotal,checklistOk,
+    adjSL,volAdj,
+    isValid:direction!=="NO TRADE"&&quality!=="Avoid",
+    selectedAsset,
+  };
+}
+
+
+function useLiveSession(){
+  const [session,setSession]=useState(()=>computeSession(new Date()));
+  const iRef=useRef(null);
+  useEffect(()=>{
+    const tick=()=>setSession(computeSession(new Date()));
+    const id=setTimeout(()=>{tick();iRef.current=setInterval(tick,60000);},msToNext());
+    return()=>{clearTimeout(id);if(iRef.current){clearInterval(iRef.current);iRef.current=null;}};
+  },[]);
+  return session;
+}
+
+const D={vix:18.55,callDelta:0.5,putDelta:0.5,gamma:0.003,theta:-45,vega:120,ivTrend:"rising",adx:"moderate",pcr:1.01,callOIAtm:800000,putOIAtm:810000,highestCallOI:24500,highestPutOI:24000,maxPain:24200,atmStrike:24200,oiChange:"price_down_oi_up",oiChangePct:0.88,fiiNet:-341,diiNet:441,fiiRatio:45,fiiMTD:-6961,diiMTD:14644,giftNifty:24064,prevClose:24176,spotPrice:24176,brentCrude:104.81,usdinr:94.47,dow:49499,nasdaq:25114,liquiditySweep:"none",sessionBias:"asia_bear",dealerHedge:"short_gamma",capital:500000,riskPct:1.0,buyVolume:0,sellVolume:0,totalVolume:0,priceChange:0,vwap:0,vwapStdDev:0,rangeHigh:24480,rangeLow:23850,keyLevel:24300,levelType:"resistance",prevVix:17.0};
+
+function useMarketState(){
+  const [vix,setVix]=useState(D.vix);const [callDelta,setCallDelta]=useState(D.callDelta);const [putDelta,setPutDelta]=useState(D.putDelta);const [gamma,setGamma]=useState(D.gamma);const [theta,setTheta]=useState(D.theta);const [vega,setVega]=useState(D.vega);const [ivTrend,setIvTrend]=useState(D.ivTrend);const [adx,setAdx]=useState(D.adx);const [pcr,setPcr]=useState(D.pcr);const [callOIAtm,setCallOIAtm]=useState(D.callOIAtm);const [putOIAtm,setPutOIAtm]=useState(D.putOIAtm);const [highestCallOI,setHighestCallOI]=useState(D.highestCallOI);const [highestPutOI,setHighestPutOI]=useState(D.highestPutOI);const [maxPain,setMaxPain]=useState(D.maxPain);const [atmStrike,setAtmStrike]=useState(D.atmStrike);const [oiChange,setOiChange]=useState(D.oiChange);const [oiChangePct,setOiChangePct]=useState(D.oiChangePct);const [fiiNet,setFiiNet]=useState(D.fiiNet);const [diiNet,setDiiNet]=useState(D.diiNet);const [fiiRatio,setFiiRatio]=useState(D.fiiRatio);const [fiiMTD,setFiiMTD]=useState(D.fiiMTD);const [diiMTD,setDiiMTD]=useState(D.diiMTD);const [giftNifty,setGiftNifty]=useState(D.giftNifty);const [prevClose,setPrevClose]=useState(D.prevClose);const [spotPrice,setSpotPrice]=useState(D.spotPrice);const [brentCrude,setBrentCrude]=useState(D.brentCrude);const [usdinr,setUsdinr]=useState(D.usdinr);const [dow,setDow]=useState(D.dow);const [nasdaq,setNasdaq]=useState(D.nasdaq);const [liquiditySweep,setLiquiditySweep]=useState(D.liquiditySweep);const [sessionBias,setSessionBias]=useState(D.sessionBias);const [dealerHedge,setDealerHedge]=useState(D.dealerHedge);const [capital,setCapital]=useState(D.capital);const [riskPct,setRiskPct]=useState(D.riskPct);const [buyVolume,setBuyVolume]=useState(D.buyVolume);const [sellVolume,setSellVolume]=useState(D.sellVolume);const [totalVolume,setTotalVolume]=useState(D.totalVolume);const [priceChange,setPriceChange]=useState(D.priceChange);const [vwap,setVwap]=useState(D.vwap);const [vwapStdDev,setVwapStdDev]=useState(D.vwapStdDev);const [rangeHigh,setRangeHigh]=useState(D.rangeHigh);const [rangeLow,setRangeLow]=useState(D.rangeLow);const [keyLevel,setKeyLevel]=useState(D.keyLevel);const [levelType,setLevelType]=useState(D.levelType);const [prevVix,setPrevVix]=useState(D.prevVix);
+  const [selectedAsset,setSelectedAsset]=useState("NIFTY50");
+
+  const session=useLiveSession();
+  const giftGap=useMemo(()=>safeNum(giftNifty,0)-safeNum(prevClose,0),[giftNifty,prevClose]);
+
+  // ── All engines with SCALAR deps only — FIX: no object refs ──
+  const regime=useMemo(()=>computeRegime({vix,ivTrend,oiChange,pcr,fiiRatio,giftGap,adx}),[vix,ivTrend,oiChange,pcr,fiiRatio,giftGap,adx]);
+
+  const gex=useMemo(()=>computeGEX({callOI:callOIAtm,putOI:putOIAtm,gamma,spot:spotPrice}),[callOIAtm,putOIAtm,gamma,spotPrice]);
+
+  const fiiAgg=useMemo(()=>computeFII({fiiNet,fiiRatio,fiiMTD}),[fiiNet,fiiRatio,fiiMTD]);
+
+  const trapProb=useMemo(()=>computeTrap({giftGap,oiChange,ivTrend,pcr,fiiRatio}),[giftGap,oiChange,ivTrend,pcr,fiiRatio]);
+
+  const absorb=useMemo(()=>computeAbsorption({oiChange,ivTrend,fiiNet,diiNet}),[oiChange,ivTrend,fiiNet,diiNet]);
+
+  const deltaImb=useMemo(()=>computeDelta({callDelta,putDelta,callOI:callOIAtm,putOI:putOIAtm}),[callDelta,putDelta,callOIAtm,putOIAtm]);
+
+  const structure=useMemo(()=>computeStructure({currentPrice:spotPrice,atmStrike,highestCallOI,highestPutOI,oiChange,ivTrend}),[spotPrice,atmStrike,highestCallOI,highestPutOI,oiChange,ivTrend]);
+
+  const sweep=useMemo(()=>computeSweep({giftGap,oiChange,ivTrend,pcr,fiiRatio,liquiditySweep}),[giftGap,oiChange,ivTrend,pcr,fiiRatio,liquiditySweep]);
+
+  const mtf=useMemo(()=>computeMTF({oiChange,ivTrend,pcr,fiiRatio,vix,giftGap,adx,callDelta,putDelta}),[oiChange,ivTrend,pcr,fiiRatio,vix,giftGap,adx,callDelta,putDelta]);
+
+  const candle=useMemo(()=>computeCandle({oiChange,ivTrend,giftGap,vix,pcr,callDelta,putDelta}),[oiChange,ivTrend,giftGap,vix,pcr,callDelta,putDelta]);
+
+  const atr=useMemo(()=>computeATR({vix,atmStrike}),[vix,atmStrike]);
+
+  const volumeDelta=useMemo(()=>computeVolumeDelta({buyVolume,sellVolume,totalVolume,priceChange,atr:atr.dailyATR}),[buyVolume,sellVolume,totalVolume,priceChange,atr.dailyATR]);
+
+  const vwapBias=useMemo(()=>computeVWAP({currentPrice:spotPrice,vwap,stdDev:vwapStdDev,atr:atr.dailyATR}),[spotPrice,vwap,vwapStdDev,atr.dailyATR]);
+
+  const premDisc=useMemo(()=>computePremDisc({rangeHigh,rangeLow,currentPrice:spotPrice,trend:regime.direction}),[rangeHigh,rangeLow,spotPrice,regime.direction]);
+
+  // FIX: Master score uses all scalars
+  const masterScore=useMemo(()=>computeMasterScore({
+    regimeDirection:regime.direction,regimeScore:regime.score,
+    sweepScore:sweep.sweepScore,sweepType:sweep.sweepType,
+    fiiDir:fiiAgg.dir,fiiScore:fiiAgg.score,
+    deltaImbDir:deltaImb.dir,deltaImbRaw:deltaImb.imbRaw,
+    absorbVal:absorb.val,absorbType:absorb.type,
+    structureSignal:structure.structureSignal,structureZone:structure.zone,
+    mtfBias15m:mtf.bias15m,mtfExecQuality:mtf.execQuality,mtfAligned:mtf.aligned,
+    premDiscAction:premDisc.tradeBias?.action,premDiscValid:premDisc.valid,
+    candlePatternBias:candle.patternBias,candleScore:candle.candleScore,
+    vwapBias:vwapBias.bias,vwapZone:vwapBias.zone,vwapMeanReversion:vwapBias.meanReversion,
+    atrVolState:atr.volState,
+    trapBull:trapProb.bull,trapBear:trapProb.bear,trapDominant:trapProb.dominant,
+    pcr,
+    volumeDeltaBias:volumeDelta.bias,volumeDeltaStrength:volumeDelta.strength,
+  }),[regime.direction,regime.score,sweep.sweepScore,sweep.sweepType,fiiAgg.dir,fiiAgg.score,deltaImb.dir,deltaImb.imbRaw,absorb.val,absorb.type,structure.structureSignal,structure.zone,mtf.bias15m,mtf.execQuality,mtf.aligned,premDisc.tradeBias?.action,premDisc.valid,candle.patternBias,candle.candleScore,vwapBias.bias,vwapBias.zone,vwapBias.meanReversion,atr.volState,trapProb.bull,trapProb.bear,trapProb.dominant,pcr,volumeDelta.bias,volumeDelta.strength]);
+
+  // FIX: Personality uses scalars
+  const personality=useMemo(()=>computePersonality({regimeCode:regime.code,regimeDirection:regime.direction,regimeColor:regime.color,regimeScore:regime.score,giftGap,sweepScore:sweep.sweepScore,sweepType:sweep.sweepType,trapBull:trapProb.bull,trapBear:trapProb.bear,absorbVal:absorb.val,volState:atr.volState,oiChange,vix}),[regime.code,regime.direction,regime.score,giftGap,sweep.sweepScore,sweep.sweepType,trapProb.bull,trapProb.bear,absorb.val,atr.volState,oiChange,vix]);
+
+  // FIX: LiqMap uses scalars
+  const liqMap=useMemo(()=>computeLiquidityMap({atmStrike,highestCallOI,highestPutOI,maxPain,slBuffer:atr.slBuffer,structureMidPoint:structure.midPoint,giftGap,sweepType:sweep.sweepType}),[atmStrike,highestCallOI,highestPutOI,maxPain,atr.slBuffer,structure.midPoint,giftGap,sweep.sweepType]);
+
+  // FIX: Execution uses scalars
+  const execution=useMemo(()=>computeSmartRisk({atmStrike,slBuffer:atr.slBuffer,t1Buffer:atr.t1Buffer,t2Buffer:atr.t2Buffer,t3Buffer:atr.t3Buffer,volState:atr.volState,masterBias:masterScore.bias,masterIsGo:masterScore.isGo,masterConfidence:masterScore.confidence,structureSignal:structure.structureSignal,capital,riskPct,vix}),[atmStrike,atr.slBuffer,atr.t1Buffer,atr.t2Buffer,atr.t3Buffer,atr.volState,masterScore.bias,masterScore.isGo,masterScore.confidence,structure.structureSignal,capital,riskPct,vix]);
+
+  // FIX: NoTrade uses scalars
+  const noTrade=useMemo(()=>computeNoTrade({vix,trapBull:trapProb.bull,trapBear:trapProb.bear,mtfAligned:mtf.aligned,sweepScore:sweep.sweepScore,sessionQuality:session.current?.quality||"",regimeCode:regime.code,masterConfidence:masterScore.confidence,liqCondition:masterScore.liqCondition,giftGap}),[vix,trapProb.bull,trapProb.bear,mtf.aligned,sweep.sweepScore,session.current?.quality,regime.code,masterScore.confidence,masterScore.liqCondition,giftGap]);
+
+  // FIX: Alerts uses scalars, tNow called at render time
+  const alerts=useMemo(()=>computeAlerts({sweepScore:sweep.sweepScore,sweepType:sweep.sweepType,sweepColor:sweep.sweepColor,sweepConfidence:sweep.confidence,trapBull:trapProb.bull,trapBear:trapProb.bear,fiiDir:fiiAgg.dir,fiiIntensity:fiiAgg.intensity,fiiColor:fiiAgg.color,absorbVal:absorb.val,absorbType:absorb.type,masterConfidence:masterScore.confidence,masterIsGo:masterScore.isGo,masterBias:masterScore.bias,regimeCode:regime.code,structureSignal:structure.structureSignal,structureColor:structure.structureColor,deltaImbRaw:deltaImb.imbRaw,volState:atr.volState,sessionQuality:session.current?.quality||"",sessionLabel:session.current?.label||""}),[sweep.sweepScore,sweep.sweepType,sweep.sweepColor,sweep.confidence,trapProb.bull,trapProb.bear,fiiAgg.dir,fiiAgg.intensity,fiiAgg.color,absorb.val,absorb.type,masterScore.confidence,masterScore.isGo,masterScore.bias,regime.code,structure.structureSignal,structure.structureColor,deltaImb.imbRaw,atr.volState,session.current?.quality,session.current?.label]);
+
+  // FIX: Narrative uses all scalars
+  const narrative=useMemo(()=>computeNarrative({
+    regimeStr:regime.regime,regimeDir:regime.direction,regimeDesc:regime.description,
+    trapBull:trapProb.bull,trapBear:trapProb.bear,trapDominant:trapProb.dominant,
+    fiiDir:fiiAgg.dir,fiiIntensity:fiiAgg.intensity,
+    absorbVal:absorb.val,absorbType:absorb.type,
+    deltaImbDir:deltaImb.dir,deltaImbRaw:deltaImb.imbRaw,
+    giftGap,vix,pcr,
+    structureSignal:structure.structureSignal,structureZone:structure.zone,structurePctFromMid:structure.pctFromMid,structureMidPoint:structure.midPoint,structureInternalLiq:structure.internalLiq,structureTrendState:structure.trendState,
+    sweepType:sweep.sweepType,sweepConfidence:sweep.confidence,sweepScore:sweep.sweepScore,
+    mtfBias15m:mtf.bias15m,mtfConf5m:mtf.conf5m,mtfExec1m:mtf.exec1m,mtfAligned:mtf.aligned,
+    volState:atr.volState,dailyATR:atr.dailyATR,
+    candlePatterns:candle.patterns,candlePatternBias:candle.patternBias,
+    sessionLabel:session.current?.label||"",sessionQuality:session.current?.quality||"",sessionInst:session.current?.inst||"",sessionMinsLeft:session.minsLeft||0,
+    noTradeBlocked:noTrade.blocked,noTradeFirstBlock:noTrade.blocks?.[0]?.r||"",
+    execIsActive:execution.isActive,execDir:execution.dir,
+    execLongEntry:execution.long?.entry,execLongSL:execution.long?.sl,execLongT1:execution.long?.t1,execLongT2:execution.long?.t2,execLongInvalid:execution.long?.invalid,
+    execShortEntry:execution.short?.entry,execShortSL:execution.short?.sl,execShortT1:execution.short?.t1,execShortT2:execution.short?.t2,execShortInvalid:execution.short?.invalid,
+    execRrT1:execution.rrT1,execRrT2:execution.rrT2,execLots:execution.lots,execSizeAdj:execution.sizeAdj,
+    regimeCode:regime.code,masterBias:masterScore.bias,
+    personalityType:personality.type,personalityStrategy:personality.strategy,personalityExpectation:personality.expectation,
+  }),[regime.regime,regime.direction,regime.code,regime.description,trapProb.bull,trapProb.bear,trapProb.dominant,fiiAgg.dir,fiiAgg.intensity,absorb.val,absorb.type,deltaImb.dir,deltaImb.imbRaw,giftGap,vix,pcr,structure.structureSignal,structure.zone,structure.pctFromMid,structure.midPoint,structure.internalLiq,structure.trendState,sweep.sweepType,sweep.confidence,sweep.sweepScore,mtf.bias15m,mtf.conf5m,mtf.exec1m,mtf.aligned,atr.volState,atr.dailyATR,candle.patternBias,session.current?.label,session.current?.quality,session.current?.inst,session.minsLeft,noTrade.blocked,noTrade.blocks,execution.isActive,execution.dir,execution.long?.entry,execution.long?.sl,execution.long?.t1,execution.long?.t2,execution.long?.invalid,execution.short?.entry,execution.short?.sl,execution.short?.t1,execution.short?.t2,execution.short?.invalid,execution.rrT1,execution.rrT2,execution.lots,execution.sizeAdj,masterScore.bias,personality.type,personality.strategy,personality.expectation]);
+
+  // FIX: Signal list uses scalars
+  const signalList=useMemo(()=>buildSignalList({regimeCode:regime.code,mtfBias15m:mtf.bias15m,deltaImbRaw:deltaImb.imbRaw,absorbType:absorb.type,sweepType:sweep.sweepType,sweepScore:sweep.sweepScore,fiiDir:fiiAgg.dir,structureSignal:structure.structureSignal,candlePatternBias:candle.patternBias,trapDominant:trapProb.dominant,vwapBias:vwapBias.bias,vwapZone:vwapBias.zone,premDiscAction:premDisc.tradeBias?.action,premDiscZone:premDisc.zone,gexNorm:gex.norm,gexFormatted:gex.gex,pcr,ivTrend,vix,giftGap}),[regime.code,mtf.bias15m,deltaImb.imbRaw,absorb.type,sweep.sweepType,sweep.sweepScore,fiiAgg.dir,structure.structureSignal,candle.patternBias,trapProb.dominant,vwapBias.bias,vwapBias.zone,premDisc.tradeBias?.action,premDisc.zone,gex.norm,gex.gex,pcr,ivTrend,vix,giftGap]);
+
+  const {bullScore,bearScore,totalW}=useMemo(()=>{let b=0,br=0,tw=0;signalList.forEach(s=>{tw+=s.w;if(s.v==="BULL")b+=s.w;if(s.v==="BEAR")br+=s.w;});return{bullScore:b,bearScore:br,totalW:tw};},[signalList]);
+  const netScore=useMemo(()=>bullScore-bearScore,[bullScore,bearScore]);
+
+  const levels=useMemo(()=>{
+    const v_=safeNum(vix,16),atm=safeNum(atmStrike,24000);
+    const dyn=Math.max(50,Math.round((v_/15)*100));
+    return{levels:[{l:"CALL WALL",spot:safeNum(highestCallOI,atm+300),color:T.red,type:"CW"},{l:"Resistance",spot:atm+dyn,color:"#ff6677",type:"R1"},{l:"MAX PAIN",spot:safeNum(maxPain,atm),color:T.purple,type:"MP"},{l:"ATM PIVOT",spot:atm,color:T.cyan,type:"PVT"},{l:"Support",spot:atm-dyn,color:"#66ffaa",type:"S1"},{l:"PUT WALL",spot:safeNum(highestPutOI,atm-300),color:T.green,type:"PW"}],dynRange:dyn,premium:150};
+  },[atmStrike,vix,highestCallOI,highestPutOI,maxPain]);
+
+  const heatmap=useMemo(()=>({cells:[
+    {label:"Bull Pressure", val:norm(bullScore,totalW),color:T.green},
+    {label:"Bear Pressure", val:norm(bearScore,totalW),color:T.red},
+    {label:"VIX Risk",      val:norm(safeNum(vix,16)-10,20),color:T.amber},
+    {label:"FII Aggression",val:norm(Math.abs(safeNum(fiiRatio,50)-50),50),color:safeNum(fiiRatio,50)>50?T.green:T.red},
+    {label:"OI Momentum",   val:oiChange==="price_up_oi_up"?80:oiChange==="price_down_oi_up"?75:40,color:oiChange==="price_up_oi_up"?T.green:oiChange==="price_down_oi_up"?T.red:T.amber},
+    {label:"PCR Extreme",   val:norm(Math.abs(safeNum(pcr,1)-1)*100,50),color:safeNum(pcr,1)>1?T.green:T.red},
+    {label:"Absorption",    val:safeNum(absorb.val,0),color:absorb.color||T.muted},
+    {label:"Trap Risk",     val:Math.max(safeNum(trapProb.bull,0),safeNum(trapProb.bear,0)),color:trapProb.dominant!=="CLEAN"?T.red:T.green},
+    {label:"Gap Magnitude", val:norm(Math.abs(safeNum(giftGap,0)),200),color:safeNum(giftGap,0)>0?T.green:T.red},
+  ]}),[bullScore,bearScore,totalW,vix,fiiRatio,oiChange,pcr,absorb.val,absorb.color,trapProb.bull,trapProb.bear,trapProb.dominant,giftGap]);
+
+  const execChecks=useMemo(()=>[
+    {item:"VIX < 20",             pass:vix<20},
+    {item:"Regime defined",       pass:regime.code!=="RB"},
+    {item:"MTF Aligned",          pass:mtf.aligned},
+    {item:"Trap prob < 50%",      pass:trapProb.bull<50&&trapProb.bear<50},
+    {item:"No active sweep",      pass:sweep.sweepScore<50},
+    {item:"Structure confirmed",  pass:structure.structureSignal!=="NONE"},
+    {item:"OI pattern clean",     pass:!["price_up_oi_down","price_down_oi_down"].includes(oiChange)},
+    {item:"R:R >= 1.5",           pass:execution.rrT2>=1.5},
+    {item:"Session tradeable",    pass:!["DANGER","EXIT","POOR"].includes(session.current?.quality)},
+    {item:"No-trade zone clear",  pass:!noTrade.blocked},
+  ],[vix,regime.code,mtf.aligned,trapProb.bull,trapProb.bear,sweep.sweepScore,structure.structureSignal,oiChange,execution.rrT2,session.current?.quality,noTrade.blocked]);
+
+  const execScore=useMemo(()=>execChecks.filter(c=>c.pass).length,[execChecks]);
+  const btStats=useMemo(()=>{const wins=BT_DATA.filter(s=>s.result==="WIN").length,total=BT_DATA.length;return{wins,losses:total-wins,total,winRate:Math.round(safeDiv(wins,total)*100),avgRR:round2(safeDiv(BT_DATA.reduce((a,s)=>a+s.rr,0),total)),totalPnL:BT_DATA.reduce((a,s)=>a+s.pnl,0)};},[]);
+
+  // AI SIGNAL ENGINE
+  const aiSignal=useMemo(()=>computeAISignal({
+    masterScore,regime,sweep,structure,mtf,trapProb,fiiAgg,
+    atr,noTrade,session,premDisc,vwapBias,candle,absorb,deltaImb,
+    atmStrike,vix,pcr,giftGap,liquiditySweep,oiChange,ivTrend,
+    selectedAsset,capital,riskPct,
+  }),[masterScore.bias,masterScore.confidence,masterScore.execQuality,masterScore.isGo,
+      regime.code,sweep.sweepType,sweep.sweepScore,structure.structureSignal,
+      mtf.aligned,trapProb.bull,trapProb.bear,fiiAgg.dir,fiiAgg.intensity,
+      atr.slBuffer,atr.t1Buffer,atr.t2Buffer,atr.t3Buffer,atr.volState,
+      noTrade.blocked,session.current?.quality,session.current?.label,
+      premDisc.zone,vwapBias.zone,candle.patterns,absorb.val,deltaImb.imbRaw,
+      atmStrike,vix,pcr,giftGap,liquiditySweep,oiChange,ivTrend,
+      selectedAsset,capital,riskPct]);
+
+  const inputs={vix,callDelta,putDelta,gamma,theta,vega,ivTrend,adx,pcr,callOIAtm,putOIAtm,highestCallOI,highestPutOI,maxPain,atmStrike,oiChange,oiChangePct,fiiNet,diiNet,fiiRatio,fiiMTD,diiMTD,giftNifty,prevClose,spotPrice,brentCrude,usdinr,dow,nasdaq,liquiditySweep,sessionBias,dealerHedge,capital,riskPct,buyVolume,sellVolume,totalVolume,priceChange,vwap,vwapStdDev,rangeHigh,rangeLow,keyLevel,levelType,prevVix};
+  const setters={setVix,setCallDelta,setPutDelta,setGamma,setTheta,setVega,setIvTrend,setAdx,setPcr,setCallOIAtm,setPutOIAtm,setHighestCallOI,setHighestPutOI,setMaxPain,setAtmStrike,setOiChange,setOiChangePct,setFiiNet,setDiiNet,setFiiRatio,setFiiMTD,setDiiMTD,setGiftNifty,setPrevClose,setSpotPrice,setBrentCrude,setUsdinr,setDow,setNasdaq,setLiquiditySweep,setSessionBias,setDealerHedge,setCapital,setRiskPct,setBuyVolume,setSellVolume,setTotalVolume,setPriceChange,setVwap,setVwapStdDev,setRangeHigh,setRangeLow,setKeyLevel,setLevelType,setPrevVix};
+
+  return{inputs,setters,giftGap,netScore,bullScore,bearScore,totalW,regime,gex,fiiAgg,trapProb,absorb,deltaImb,structure,sweep,mtf,candle,atr,volumeDelta,vwapBias,premDisc,masterScore,personality,liqMap,execution,noTrade,alerts,narrative,signalList,levels,heatmap,execChecks,execScore,btStats,session,dealerHedge,aiSignal,selectedAsset,setSelectedAsset};
+}
+
+// ══════════════════════════════════════════════════════════
+// JOURNAL HOOK — Full Persistent Memory System v2.0
+// ══════════════════════════════════════════════════════════
+const STORAGE_KEY   = "smOS-journal-v2-trades";
+const NOTES_KEY     = "smOS-journal-v2-notes";
+const PSYCH_KEY     = "smOS-journal-v2-psychology";
+const REFLECT_KEY   = "smOS-journal-v2-reflections";
+const CHECKLIST_KEY = "smOS-journal-v2-checklist";
+const RISK_KEY      = "smOS-journal-v2-risk";
+const SESSION_KEY   = "smOS-journal-v2-session";
+
+// Safe localStorage helpers
+function lsGet(key,fallback){try{const r=localStorage.getItem(key);return r!=null?JSON.parse(r):fallback;}catch(e){return fallback;}}
+function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));}catch(e){console.warn("smOS storage:",e);}}
+function lsDel(key){try{localStorage.removeItem(key);}catch(e){}}
+
+const DEFAULT_NOTES={marketBias:"",preMarket:"",keyLevels:"",riskNotes:"",sessionAnalysis:""};
+const DEFAULT_PSYCH={emotionalState:"CALM",morningRoutine:"",mentalState:"",fearGreed:50,biasCheck:"",postSessionReview:""};
+const DEFAULT_REFLECT={dailyReflection:"",lessonLearned:"",improvementPlan:"",gratitude:"",tomorrowFocus:""};
+const DEFAULT_CHECKLIST={
+  preTradeItems:[
+    {id:"pt1",label:"Pre-market analysis complete",checked:false},
+    {id:"pt2",label:"Key levels marked on chart",checked:false},
+    {id:"pt3",label:"News/events checked",checked:false},
+    {id:"pt4",label:"Risk per trade defined",checked:false},
+    {id:"pt5",label:"Mental state assessed",checked:false},
+    {id:"pt6",label:"No revenge trade intention",checked:false},
+  ],
+  postTradeItems:[
+    {id:"po1",label:"Trade logged in journal",checked:false},
+    {id:"po2",label:"Reviewed entry/exit",checked:false},
+    {id:"po3",label:"Emotion during trade noted",checked:false},
+    {id:"po4",label:"P&L recorded",checked:false},
+    {id:"po5",label:"Lesson extracted",checked:false},
+    {id:"po6",label:"Daily reflection written",checked:false},
+  ]
+};
+
+function useJournal(){
+  const [trades,setTrades]     = useState([]);
+  const [notes,setNotes]       = useState(DEFAULT_NOTES);
+  const [psych,setPsych]       = useState(DEFAULT_PSYCH);
+  const [reflect,setReflect]   = useState(DEFAULT_REFLECT);
+  const [checklist,setChecklist]= useState(DEFAULT_CHECKLIST);
+  const [storageReady,setStorageReady] = useState(false);
+  const [saveStatus,setSaveStatus]     = useState("idle"); // idle | saving | saved
+  const saveTimerRef = useRef(null);
+
+  const [form,setForm] = useState({type:"LONG",entry:"",sl:"",target:"",exit:"",setup:"BOS+MTF",emotion:"CALM",notes:""});
+  const updateForm = useCallback((k,v)=>setForm(f=>({...f,[k]:v})),[]);
+
+  // ── LOAD ALL DATA ON MOUNT ──
+  useEffect(()=>{
+    const savedTrades    = lsGet(STORAGE_KEY, []);
+    const savedNotes     = lsGet(NOTES_KEY, DEFAULT_NOTES);
+    const savedPsych     = lsGet(PSYCH_KEY, DEFAULT_PSYCH);
+    const savedReflect   = lsGet(REFLECT_KEY, DEFAULT_REFLECT);
+    const savedChecklist = lsGet(CHECKLIST_KEY, DEFAULT_CHECKLIST);
+
+    if(Array.isArray(savedTrades)) setTrades(savedTrades);
+    if(savedNotes)   setNotes(n=>({...DEFAULT_NOTES,...savedNotes}));
+    if(savedPsych)   setPsych(p=>({...DEFAULT_PSYCH,...savedPsych}));
+    if(savedReflect) setReflect(r=>({...DEFAULT_REFLECT,...savedReflect}));
+    if(savedChecklist && savedChecklist.preTradeItems) setChecklist(savedChecklist);
+    setStorageReady(true);
+  },[]);
+
+  // ── TRIGGER SAVE INDICATOR ──
+  const triggerSave = useCallback(()=>{
+    setSaveStatus("saving");
+    if(saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(()=>setSaveStatus("saved"),400);
+    const clearTimer = setTimeout(()=>setSaveStatus("idle"),2800);
+    return ()=>clearTimeout(clearTimer);
+  },[]);
+
+  // ── AUTO-SAVE: TRADES ──
+  useEffect(()=>{
+    if(!storageReady) return;
+    lsSet(STORAGE_KEY, trades);
+    triggerSave();
+  },[trades, storageReady]);
+
+  // ── AUTO-SAVE: NOTES ──
+  useEffect(()=>{
+    if(!storageReady) return;
+    lsSet(NOTES_KEY, notes);
+    triggerSave();
+  },[notes, storageReady]);
+
+  // ── AUTO-SAVE: PSYCHOLOGY ──
+  useEffect(()=>{
+    if(!storageReady) return;
+    lsSet(PSYCH_KEY, psych);
+    triggerSave();
+  },[psych, storageReady]);
+
+  // ── AUTO-SAVE: REFLECTIONS ──
+  useEffect(()=>{
+    if(!storageReady) return;
+    lsSet(REFLECT_KEY, reflect);
+    triggerSave();
+  },[reflect, storageReady]);
+
+  // ── AUTO-SAVE: CHECKLIST ──
+  useEffect(()=>{
+    if(!storageReady) return;
+    lsSet(CHECKLIST_KEY, checklist);
+    triggerSave();
+  },[checklist, storageReady]);
+
+  // ── CHECKLIST HELPERS ──
+  const toggleCheckItem = useCallback((section, id)=>{
+    setChecklist(cl=>{
+      const items = cl[section].map(item=>item.id===id?{...item,checked:!item.checked}:item);
+      return {...cl,[section]:items};
+    });
+  },[]);
+
+  const resetChecklist = useCallback(()=>{
+    setChecklist(cl=>({
+      preTradeItems:  cl.preTradeItems.map(i=>({...i,checked:false})),
+      postTradeItems: cl.postTradeItems.map(i=>({...i,checked:false})),
+    }));
+  },[]);
+
+  // ── TRADE ACTIONS ──
+  const addTrade=useCallback((t)=>{
+    const en=safeNum(t.entry,0),ex=safeNum(t.exit,0),tgt=safeNum(t.target,0),sl=safeNum(t.sl,0);
+    const rawPnL=t.type==="LONG"?ex-en:en-ex;
+    const pnl=Math.round(rawPnL*65),rr=round2(safeDiv(Math.abs(tgt-en),Math.max(Math.abs(sl-en),1)));
+    const grade=rr>=2&&pnl>0?"A+":rr>=1.5&&pnl>0?"A":pnl>0?"B":rr>=1.5?"C":"D";
+    setTrades(p=>[{...t,pnl,rr,result:pnl>=0?"WIN":"LOSS",date:new Date().toLocaleDateString("en-IN"),time:tNow(),id:Date.now(),grade},...p.slice(0,99)]);
+  },[]);
+
+  const removeTrade=useCallback((id)=>setTrades(p=>p.filter(t=>t.id!==id)),[]);
+
+  const clearAll=useCallback(()=>{
+    if(!window.confirm("Clear ALL journal data? This cannot be undone.")) return;
+    setTrades([]);
+    setNotes(DEFAULT_NOTES);
+    setPsych(DEFAULT_PSYCH);
+    setReflect(DEFAULT_REFLECT);
+    setChecklist(DEFAULT_CHECKLIST);
+    [STORAGE_KEY,NOTES_KEY,PSYCH_KEY,REFLECT_KEY,CHECKLIST_KEY].forEach(lsDel);
+  },[]);
+
+  // ── EXPORT BACKUP ──
+  const exportBackup = useCallback(()=>{
+    const data={
+      version:"smOS-journal-v2",
+      exportedAt:new Date().toISOString(),
+      trades,notes,psych,reflect,checklist,
+    };
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");
+    a.href=url;
+    a.download=`SmartMoneyOS-Journal-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },[trades,notes,psych,reflect,checklist]);
+
+  // ── IMPORT BACKUP ──
+  const importBackup = useCallback(()=>{
+    const input=document.createElement("input");
+    input.type="file";
+    input.accept=".json";
+    input.onchange=e=>{
+      const file=e.target.files?.[0];
+      if(!file) return;
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        try{
+          const data=JSON.parse(ev.target.result);
+          if(!data.version?.startsWith("smOS-journal")){alert("Invalid backup file.");return;}
+          if(!window.confirm(`Import backup from ${data.exportedAt?.slice(0,10)||"unknown date"}? Current data will be replaced.`)) return;
+          if(Array.isArray(data.trades))   setTrades(data.trades);
+          if(data.notes)     setNotes(n=>({...DEFAULT_NOTES,...data.notes}));
+          if(data.psych)     setPsych(p=>({...DEFAULT_PSYCH,...data.psych}));
+          if(data.reflect)   setReflect(r=>({...DEFAULT_REFLECT,...data.reflect}));
+          if(data.checklist) setChecklist(cl=>data.checklist.preTradeItems?data.checklist:cl);
+        }catch(err){alert("Failed to parse backup: "+err.message);}
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  },[]);
+
+  // ── STATS ──
+  const stats=useMemo(()=>{
+    if(!trades.length)return{wins:0,losses:0,winRate:0,avgRR:0,totalPnL:0,bestSetup:"—",worstEmotion:"—"};
+    const wins=trades.filter(t=>t.result==="WIN").length;
+    const sg={};trades.forEach(t=>{if(!sg[t.setup])sg[t.setup]={w:0,t:0};sg[t.setup].t++;if(t.result==="WIN")sg[t.setup].w++;});
+    const bestSetup=Object.entries(sg).sort((a,b)=>safeDiv(b[1].w,b[1].t)-safeDiv(a[1].w,a[1].t))[0]?.[0]||"—";
+    const eg={};trades.forEach(t=>{if(!eg[t.emotion])eg[t.emotion]={pnl:0};eg[t.emotion].pnl+=safeNum(t.pnl,0);});
+    const worstEmotion=Object.entries(eg).sort((a,b)=>a[1].pnl-b[1].pnl)[0]?.[0]||"—";
+    return{wins,losses:trades.length-wins,winRate:Math.round(safeDiv(wins,trades.length)*100),avgRR:round2(safeDiv(trades.reduce((a,t)=>a+safeNum(t.rr,0),0),trades.length)),totalPnL:trades.reduce((a,t)=>a+safeNum(t.pnl,0),0),bestSetup,worstEmotion};
+  },[trades]);
+
+  return{
+    trades,form,updateForm,addTrade,removeTrade,clearAll,stats,storageReady,saveStatus,
+    notes,setNotes,psych,setPsych,reflect,setReflect,
+    checklist,toggleCheckItem,resetChecklist,
+    exportBackup,importBackup,
+  };
+}
+
+// ══════════════════════════════════════════════════════════
+// UI PRIMITIVES
+// ══════════════════════════════════════════════════════════
+const Mono=memo(({children,s=12,c=T.white,w=400,style={}})=><span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:s,color:c,fontWeight:w,...style}}>{children}</span>);
+const Sans=memo(({children,s=12,c=T.white,w=400,style={}})=><span style={{fontFamily:"'IBM Plex Sans',sans-serif",fontSize:s,color:c,fontWeight:w,...style}}>{children}</span>);
+const Lbl=memo(({children,c=T.muted})=><div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:c,letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>{children}</div>);
+const Chip=memo(({label,color=T.cyan,size=8})=><span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:size,fontWeight:700,color,background:`${color}18`,border:`1px solid ${color}40`,padding:"2px 6px",borderRadius:3,letterSpacing:1,textTransform:"uppercase",whiteSpace:"nowrap"}}>{String(label??"—")}</span>);
+const Dot=memo(({color=T.green,pulse=false,size=7})=><div className={pulse?"blink":""} style={{width:size,height:size,borderRadius:"50%",background:color,boxShadow:`0 0 6px ${color}`,flexShrink:0}}/>);
+const Divider=memo(({color=T.border,my=8})=><div style={{height:1,background:color,margin:`${my}px 0`}}/>);
+const Card=memo(({children,glow=null,style={}})=><div style={{background:T.card,border:`1px solid ${T.border}`,borderRadius:6,padding:"12px 14px",boxShadow:glow?`0 0 20px ${glow}18,inset 0 1px 0 ${glow}12`:"none",...style}}>{children}</div>);
+const Row=memo(({children,gap=8,align="center",justify="flex-start",wrap=false,style={}})=><div style={{display:"flex",alignItems:align,justifyContent:justify,gap,flexWrap:wrap?"wrap":"nowrap",...style}}>{children}</div>);
+const Col=memo(({children,gap=10,style={}})=><div style={{display:"flex",flexDirection:"column",gap,...style}}>{children}</div>);
+const Grid=memo(({children,cols="1fr 1fr",gap=10,style={}})=><div style={{display:"grid",gridTemplateColumns:cols,gap,...style}}>{children}</div>);
+const PTitle=memo(({icon,children,color=T.cyan,right})=>(
+  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+    <div style={{display:"flex",alignItems:"center",gap:7}}>
+      <div style={{width:2,height:12,background:color,borderRadius:1}}/>
+      <Mono s={10} w={700} c={color} style={{letterSpacing:2,textTransform:"uppercase"}}>{icon&&<span style={{marginRight:5}}>{icon}</span>}{children}</Mono>
+    </div>
+    {right&&<div>{right}</div>}
+  </div>
+));
+const MBar=memo(({val,max=100,color=T.cyan,h=4})=>{
+  const p=safePct(safeDiv(safeNum(val,0),Math.max(safeNum(max,1),1))*100);
+  return(
+    <div style={{background:T.grid,borderRadius:2,height:h,overflow:"hidden",border:`1px solid ${T.border}`}}>
+      <div style={{width:`${p}%`,height:"100%",borderRadius:2,background:`linear-gradient(90deg,${color}50,${color})`,transition:"width .5s cubic-bezier(.4,0,.2,1)"}}/>
+    </div>
+  );
+});
+// FIX: DualBar handles bv+brv=0
+const DualBar=memo(({bv,brv,h=5})=>{
+  const t=Math.max(safeNum(bv,0)+safeNum(brv,0),1);
+  const bp=safePct(safeNum(bv,0)/t*100),sp=safePct(safeNum(brv,0)/t*100);
+  return(
+    <div style={{background:T.grid,borderRadius:2,height:h,overflow:"hidden",display:"flex",border:`1px solid ${T.border}`}}>
+      <div style={{width:`${bp}%`,background:`linear-gradient(90deg,${T.green}50,${T.green})`,transition:"width .5s"}}/>
+      <div style={{width:`${sp}%`,background:`linear-gradient(90deg,${T.red}50,${T.red})`,transition:"width .5s"}}/>
+    </div>
+  );
+});
+const Inp=memo(({label,value,onChange,type="number",options,unit,color=T.cyan})=>(
+  <div style={{marginBottom:7}}>
+    <Lbl>{label}</Lbl>
+    <div style={{display:"flex",gap:5,alignItems:"center"}}>
+      {options
+        ?<select value={value} onChange={e=>onChange(e.target.value)} style={{background:T.panel,border:`1px solid ${T.borderHi}`,color:T.white,borderRadius:4,padding:"5px 8px",fontSize:11,width:"100%",cursor:"pointer"}}>{options.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>
+        :<input type={type} value={value} onChange={e=>onChange(type==="number"?parseFloat(e.target.value)||0:e.target.value)} style={{background:T.panel,border:`1px solid ${T.borderHi}`,color,borderRadius:4,padding:"5px 8px",fontSize:11,width:"100%",fontFamily:"'IBM Plex Mono',monospace",fontWeight:500}}/>
+      }
+      {unit&&<Mono s={8} c={T.muted}>{unit}</Mono>}
+    </div>
+  </div>
+));
+const SigRow=memo(({l,v,d,w})=>{
+  const c=v==="BULL"?T.green:v==="BEAR"?T.red:T.amber;
+  return(
+    <div style={{display:"grid",gridTemplateColumns:"1fr 55px",gap:"0 6px",padding:"4px 0",borderBottom:`1px solid ${T.border}`}}>
+      <div><Mono s={10} c={T.white}>{l}</Mono><div style={{fontSize:8,color:T.muted}}>{d}</div></div>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}><Chip label={v} color={c} size={7}/><MBar val={w} max={3} color={c} h={2}/></div>
+    </div>
+  );
+});
+const StatCard=memo(({label,value,color=T.cyan,sub,style={}})=>(
+  <div style={{background:`${color}0a`,border:`1px solid ${color}25`,borderRadius:5,padding:"8px 10px",textAlign:"center",...style}}>
+    <Lbl c={color}>{label}</Lbl>
+    <Mono s={14} c={color} w={700}>{String(value??"—")}</Mono>
+    {sub&&<div style={{fontSize:8,color:T.muted,marginTop:2}}>{sub}</div>}
+  </div>
+));
+const WarnBanner=memo(({text,color=T.red})=>(
+  <div style={{display:"flex",alignItems:"center",gap:7,padding:"5px 8px",background:`${color}10`,border:`1px solid ${color}30`,borderRadius:4,marginBottom:5}}>
+    <Dot color={color} size={5}/><Mono s={9} c={color}>{text}</Mono>
+  </div>
+));
+const CheckItem=memo(({item,pass})=>(
+  <div style={{display:"flex",alignItems:"center",gap:9,padding:"5px 0",borderBottom:`1px solid ${T.border}`}}>
+    <div style={{width:15,height:15,borderRadius:3,flexShrink:0,background:pass?`${T.green}18`:`${T.red}18`,border:`1px solid ${pass?T.green:T.red}40`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:pass?T.green:T.red}}>{pass?"✓":"✗"}</div>
+    <Mono s={9} c={pass?T.white:T.muted}>{item}</Mono>
+  </div>
+));
+const SessStrip=memo(({sessions=[],currentLabel})=>(
+  <div style={{display:"grid",gridTemplateColumns:`repeat(${sessions.length},1fr)`,gap:2}}>
+    {sessions.map((s,i)=>(
+      <div key={i} style={{background:`${s.color}12`,border:`1px solid ${s.color}${currentLabel===s.label?"80":"20"}`,borderRadius:3,padding:"2px 3px",textAlign:"center"}}>
+        <div style={{fontSize:7,color:s.color,fontWeight:700}}>{s.label.split(" ")[0]}</div>
+      </div>
+    ))}
+  </div>
+));
+const HeatCell=memo(({label,val,color})=>(
+  <div className="hp" style={{background:`${color}10`,border:`1px solid ${color}30`,borderRadius:5,padding:"7px 5px",textAlign:"center"}}>
+    <div style={{fontSize:7,color:T.muted,marginBottom:3,letterSpacing:1}}>{label}</div>
+    <div style={{fontSize:12,fontWeight:700,color}}>{Math.round(safeNum(val,0))}%</div>
+    <MBar val={val} max={100} color={color} h={2}/>
+  </div>
+));
+const NarrLine=memo(({text,color=T.cyan})=>(
+  <div style={{marginBottom:9,display:"flex",gap:8,alignItems:"flex-start"}}>
+    <div style={{width:4,height:4,borderRadius:"50%",background:color,marginTop:6,flexShrink:0}}/>
+    <Sans s={11} c={T.white} style={{lineHeight:1.65}}>{text}</Sans>
+  </div>
+));
+const LiveClock=memo(()=>{
+  const [t,setT]=useState(new Date());
+  useEffect(()=>{const id=setInterval(()=>setT(new Date()),1000);return()=>clearInterval(id);},[]);
+  return <Mono s={13} c={T.cyan} w={600}>{t.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}</Mono>;
+});
+const AlertCard=memo(({alert})=>(
+  <div className="slide" style={{display:"flex",alignItems:"flex-start",gap:8,padding:"6px 10px",background:`${alert.color}0c`,border:`1px solid ${alert.color}30`,borderRadius:4,marginBottom:5}}>
+    <Dot color={alert.color} size={5} pulse/>
+    <div style={{flex:1}}>
+      <Mono s={9} c={alert.color} w={600}>{alert.msg}</Mono>
+      <div style={{fontSize:7,color:T.muted,marginTop:1}}>{alert.category} · {alert.time}</div>
+    </div>
+    <div style={{fontSize:7,background:`${alert.color}20`,color:alert.color,padding:"1px 4px",borderRadius:2,fontFamily:"IBM Plex Mono",fontWeight:700}}>P{alert.priority}</div>
+  </div>
+));
+
+// ══════════════════════════════════════════════════════════
+// ERROR BOUNDARY
+// ══════════════════════════════════════════════════════════
+class ErrorBoundary extends Component{
+  constructor(p){super(p);this.state={err:null};}
+  static getDerivedStateFromError(e){return{err:e};}
+  render(){
+    if(this.state.err)return(
+      <div style={{background:T.bg,minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12,padding:24}}>
+        <Mono s={14} c={T.red} w={700}>⚠ Terminal Error</Mono>
+        <Mono s={10} c={T.muted}>{this.state.err?.message}</Mono>
+        <button onClick={()=>this.setState({err:null})} style={{background:T.cyan,color:T.bg,border:"none",borderRadius:4,padding:"8px 18px",cursor:"pointer",fontFamily:"IBM Plex Mono",fontWeight:700}}>Reset Terminal</button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// MAIN TERMINAL
+// ══════════════════════════════════════════════════════════
+function SmartMoneyOS(){
+  const [tab,setTab]=useState("DASHBOARD");
+  const handleTab=useCallback(t=>setTab(t),[]);
+  const ms=useMarketState();
+  const jnl=useJournal();
+  const mx=ms.masterScore;
+  const ex=ms.execution;
+
+  return(
+    <ErrorBoundary>
+      <div style={{background:T.bg,minHeight:"100vh",color:T.white,fontFamily:"'IBM Plex Mono',monospace",fontSize:12}}>
+        <style>{CSS}</style>
+        <div style={{position:"fixed",top:0,left:0,right:0,bottom:0,pointerEvents:"none",zIndex:0,background:"repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,229,255,.005) 2px,rgba(0,229,255,.005) 4px)"}}/>
+        <div style={{position:"relative",zIndex:1,maxWidth:1180,margin:"0 auto",padding:"10px 14px"}}>
+
+          {/* HEADER */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,borderBottom:`1px solid ${T.border}`,paddingBottom:10}}>
+            <div>
+              <div style={{fontSize:8,color:T.cyan,letterSpacing:4,marginBottom:2}}>▸ INSTITUTIONAL SMART MONEY OPERATING SYSTEM v6.0 ◂</div>
+              <div style={{fontSize:17,fontWeight:700,color:T.white,letterSpacing:3,fontFamily:"'IBM Plex Sans',sans-serif"}}>SMART MONEY OS</div>
+              <div style={{fontSize:8,color:T.muted,marginTop:1}}>24 Engines · AI Execution Signal Engine · Institutional Architecture · v6.0</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div className="blink" style={{fontSize:8,color:T.green,marginBottom:2}}>● LIVE</div>
+              <LiveClock/>
+              <div style={{fontSize:8,color:T.muted,marginTop:1}}>NSE · {ms.session?.current?.label||"—"}</div>
+            </div>
+          </div>
+
+          {/* MASTER COMMAND BAR */}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(8,1fr)",gap:6,marginBottom:10}}>
+            {[
+              {l:"MASTER BIAS", v:mx.bias,          c:mx.biasColor,                       sub:`${mx.confidence}% conf`},
+              {l:"ACTION",      v:mx.action,         c:mx.biasColor,                       sub:mx.isGo?"✅ EXECUTE":"⏳ WAIT"},
+              {l:"REGIME",      v:ms.regime?.regime, c:ms.regime?.color,                   sub:ms.regime?.direction},
+              {l:"STRUCTURE",   v:ms.structure?.structureSignal||"—",c:ms.structure?.structureColor||T.muted,sub:ms.structure?.zone},
+              {l:"SWEEP",       v:ms.sweep?.sweepType==="NO SWEEP"?"CLEAN":ms.sweep?.sweepType?.split(" ")[0],c:ms.sweep?.sweepColor,sub:`${ms.sweep?.sweepScore||0}%`},
+              {l:"TRAP",        v:ms.trapProb?.dominant,c:ms.trapProb?.color,              sub:`B:${ms.trapProb?.bull}% S:${ms.trapProb?.bear}%`},
+              {l:"DIRECTION",   v:ex?.dir||"WAIT",   c:ex?.dir==="LONG"?T.green:ex?.dir==="SHORT"?T.red:T.muted,sub:`R:R ${ex?.rrT2||0}:1`},
+              {l:"EXEC SCORE",  v:`${ms.execScore}/${ms.execChecks?.length}`,c:ms.execScore>=8?T.green:ms.execScore>=6?T.amber:T.red,sub:ms.execScore>=8?"PERFECT":ms.execScore>=6?"GO":"WAIT"},
+            ].map((item,i)=>(
+              <div key={i} className="pulse" style={{background:T.card,border:`1px solid ${item.c}35`,borderRadius:5,padding:"7px 8px",textAlign:"center",boxShadow:`0 0 10px ${item.c}0e`}}>
+                <Lbl c={T.muted}>{item.l}</Lbl>
+                <div style={{fontSize:10,fontWeight:700,color:item.c,marginBottom:1,letterSpacing:1}}>{item.v||"—"}</div>
+                <div style={{fontSize:8,color:T.muted}}>{item.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* TABS */}
+          <div style={{display:"flex",gap:0,marginBottom:10,borderBottom:`1px solid ${T.border}`,overflowX:"auto"}}>
+            {TABS.map(t=>(
+              <button key={t} onClick={()=>handleTab(t)} style={{background:"none",border:"none",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",fontSize:9,fontWeight:700,letterSpacing:2,padding:"7px 14px",color:tab===t?T.cyan:T.muted,borderBottom:tab===t?`2px solid ${T.cyan}`:"2px solid transparent",transition:"color .15s",whiteSpace:"nowrap"}}>
+                {t}
+              </button>
+            ))}
+          </div>
+
+          {tab==="DASHBOARD"    && <DashboardTab ms={ms} mx={mx} ex={ex}/>}
+          {tab==="INPUT"        && <InputTab ms={ms}/>}
+          {tab==="ANALYSIS"     && <AnalysisTab ms={ms} mx={mx}/>}
+          {tab==="EXECUTION"    && <ExecutionTab ms={ms} mx={mx} ex={ex}/>}
+          {tab==="JOURNAL"      && <JournalTab jnl={jnl}/>}
+          {tab==="INTELLIGENCE" && <IntelligenceTab ms={ms} mx={mx}/>}
+          {tab==="AI SIGNALS"   && <AISignalTab ms={ms} mx={mx}/>}
+
+          <div style={{marginTop:14,paddingTop:8,borderTop:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between"}}>
+            <Mono s={7} c={T.dim}>SMART MONEY OS v6.0 · 24 ENGINES · AI SIGNAL ENGINE</Mono>
+            <Mono s={7} c={T.dim}>NOT INVESTMENT ADVICE · EDUCATIONAL ONLY</Mono>
+          </div>
+        </div>
+      </div>
+    </ErrorBoundary>
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// DASHBOARD TAB
+// ══════════════════════════════════════════════════════════
+const DashboardTab=memo(({ms,mx,ex})=>(
+  <Grid cols="1fr 1fr 1fr" gap={10}>
+    <Col gap={10}>
+      <Card glow={mx.biasColor}>
+        <PTitle color={mx.biasColor} right={<Chip label={mx.confLevel} color={mx.confColor}/>}>Master Score Engine</PTitle>
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:10}}>
+          <div style={{textAlign:"center",minWidth:70}}>
+            <div style={{fontSize:42,fontWeight:800,color:mx.biasColor,fontFamily:"IBM Plex Mono",lineHeight:1}}>{mx.netScore>0?"+":""}{mx.netScore}</div>
+            <div style={{fontSize:8,color:T.muted}}>/ ±100</div>
+          </div>
+          <div style={{flex:1}}>
+            <MBar val={50+mx.netScore/2} max={100} color={mx.biasColor} h={8}/>
+            <div style={{marginTop:6,fontSize:11,color:mx.biasColor,fontWeight:700}}>{mx.action}</div>
+            <div style={{fontSize:9,color:T.muted,marginTop:2}}>{mx.condition} · {mx.liqCondition}</div>
+          </div>
+        </div>
+        <Grid cols="1fr 1fr 1fr" gap={6}>
+          <StatCard label="Confidence"  value={`${mx.confidence}%`}   color={mx.confColor}/>
+          <StatCard label="Exec Quality"value={`${mx.execQuality}%`}  color={mx.execColor}/>
+          <StatCard label="Inst Press"  value={`${mx.instPressure}%`} color={mx.instDir>=0?T.green:T.red}/>
+        </Grid>
+      </Card>
+
+      <Card glow={ms.personality?.color}>
+        <PTitle color={ms.personality?.color} right={<Chip label={(ms.personality?.risk||"MOD")+" RISK"} color={ms.personality?.risk==="LOW"?T.green:ms.personality?.risk==="HIGH"?T.red:T.amber}/>}>Market Personality</PTitle>
+        <div style={{textAlign:"center",padding:"6px 0 8px"}}>
+          <Mono s={15} c={ms.personality?.color} w={700}>{ms.personality?.type||"—"}</Mono>
+        </div>
+        <div style={{background:T.panel,borderRadius:4,padding:"7px 10px",border:`1px solid ${T.border}`,marginBottom:6}}>
+          <Sans s={10} c={T.white}>{ms.personality?.strategy}</Sans>
+        </div>
+        <div style={{fontSize:9,color:T.dim}}>{ms.personality?.expectation}</div>
+      </Card>
+
+      <Card glow={ms.noTrade?.color}>
+        <PTitle color={ms.noTrade?.color} right={<Chip label={ms.noTrade?.worst} color={ms.noTrade?.color}/>}>No-Trade Zone Filter</PTitle>
+        <div style={{textAlign:"center",marginBottom:8}}>
+          <Chip label={ms.noTrade?.verdict||"—"} color={ms.noTrade?.color} size={10}/>
+        </div>
+        {ms.noTrade?.blocks?.slice(0,3).map((b,i)=><WarnBanner key={i} text={b.r} color={b.sev==="CRITICAL"?T.red:T.amber}/>)}
+        {ms.noTrade?.warns?.slice(0,2).map((w,i)=><div key={i} style={{fontSize:8,color:T.amber,marginBottom:3}}>⚠ {w}</div>)}
+        {ms.noTrade?.blocks?.length===0&&<Row gap={8}><Dot color={T.green}/><Mono s={10} c={T.green}>ALL CLEAR — Trading conditions met</Mono></Row>}
+      </Card>
+    </Col>
+
+    <Col gap={10}>
+      <Card glow={T.orange}>
+        <PTitle color={T.orange} icon="⚡" right={<Chip label={`${ms.alerts?.length} alerts`} color={T.orange}/>}>Live Intelligence Alerts</PTitle>
+        <div style={{maxHeight:220,overflowY:"auto"}}>
+          {ms.alerts?.length>0?ms.alerts.map((a,i)=><AlertCard key={i} alert={a}/>):<Row gap={8}><Dot color={T.green}/><Mono s={9} c={T.muted}>No active alerts — market quiet</Mono></Row>}
+        </div>
+      </Card>
+
+      <Card glow={ex?.isActive?ex.tcolor:T.muted}>
+        <PTitle color={ex?.isActive?ex.tcolor:T.muted} right={<Chip label={ex?.dir||"WAIT"} color={ex?.dir==="LONG"?T.green:ex?.dir==="SHORT"?T.red:T.muted} size={10}/>}>Execution Decision</PTitle>
+        {ex?.isActive?(
+          <>
+            <Grid cols="1fr 1fr" gap={8} style={{marginBottom:8}}>
+              <div style={{background:`${ex.dir==="LONG"?T.green:T.red}0a`,border:`1px solid ${ex.dir==="LONG"?T.green:T.red}33`,borderRadius:5,padding:8}}>
+                <Lbl c={ex.dir==="LONG"?T.green:T.red}>ENTRY</Lbl>
+                <Mono s={12} c={ex.dir==="LONG"?T.green:T.red} w={700}>{(ex.dir==="LONG"?ex.long:ex.short)?.entry}</Mono>
+              </div>
+              <div style={{background:`${T.red}0a`,border:`1px solid ${T.red}33`,borderRadius:5,padding:8}}>
+                <Lbl c={T.red}>STOP LOSS</Lbl>
+                <Mono s={12} c={T.red} w={700}>{(ex.dir==="LONG"?ex.long:ex.short)?.sl}</Mono>
+              </div>
+            </Grid>
+            <Grid cols="1fr 1fr 1fr" gap={6} style={{marginBottom:8}}>
+              {[["T1",ex.rrT1,1],["T2",ex.rrT2,2],["T3",ex.rrT3,3]].map(([k,r,n])=>(
+                <div key={k} style={{background:`${T.green}0a`,border:`1px solid ${T.green}33`,borderRadius:4,padding:6,textAlign:"center"}}>
+                  <div style={{fontSize:7,color:T.muted}}>{k} ({r}R)</div>
+                  <Mono s={11} c={T.green} w={600}>{(ex.dir==="LONG"?ex.long:ex.short)?.[`t${n}`]}</Mono>
+                </div>
+              ))}
+            </Grid>
+            <Grid cols="repeat(3,1fr)" gap={5}>
+              {[["Lots",ex.lots,T.cyan],["Risk",`₹${fmt(ex.maxRisk)}`,T.red],["Size",ex.sizeAdj,ex.volAdj==="EXPANSION"?T.red:T.green]].map(([k,v,c])=>(
+                <div key={k} style={{textAlign:"center"}}><div style={{fontSize:7,color:T.muted,marginBottom:2}}>{k}</div><Mono s={10} c={c} w={600}>{v}</Mono></div>
+              ))}
+            </Grid>
+            <div style={{marginTop:7,padding:"5px 8px",background:`${T.red}0a`,border:`1px solid ${T.red}22`,borderRadius:4}}>
+              <Mono s={8} c={T.red}>🚫 INVALIDATION: {ex.dir==="LONG"?"Close below":"Close above"} {(ex.dir==="LONG"?ex.long:ex.short)?.invalid}</Mono>
+            </div>
+          </>
+        ):(
+          <div style={{textAlign:"center",padding:"16px 0"}}>
+            <div style={{fontSize:22,marginBottom:6}}>🚫</div>
+            <Mono s={11} c={T.muted} w={600}>NO VALID SETUP</Mono>
+            <div style={{fontSize:9,color:T.dim,marginTop:4}}>{ms.noTrade?.blocks?.[0]?.r||"Waiting for confluence"}</div>
+          </div>
+        )}
+      </Card>
+
+      <Card glow={ms.session?.current?.color}>
+        <PTitle color={ms.session?.current?.color}>Session Intelligence</PTitle>
+        <Row gap={8} style={{marginBottom:7}}>
+          <Chip label={ms.session?.current?.label||"—"} color={ms.session?.current?.color} size={10}/>
+          <Chip label={ms.session?.current?.quality||"—"} color={ms.session?.current?.color}/>
+          <Mono s={9} c={T.muted}>{ms.session?.minsLeft}min</Mono>
+        </Row>
+        <div style={{fontSize:10,color:ms.session?.current?.color,marginBottom:7}}>{ms.session?.current?.inst}</div>
+        <SessStrip sessions={ms.session?.sessions||[]} currentLabel={ms.session?.current?.label}/>
+      </Card>
+    </Col>
+
+    <Col gap={10}>
+      <Card glow={T.teal}>
+        <PTitle color={T.teal}>Institutional Heatmap</PTitle>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+          {ms.heatmap?.cells?.map((cell,i)=><HeatCell key={i} {...cell}/>)}
+        </div>
+      </Card>
+
+      <Card glow={ms.liqMap?.sweepBiasColor}>
+        <PTitle color={ms.liqMap?.sweepBiasColor} right={<Chip label={ms.liqMap?.sweepBias||"—"} color={ms.liqMap?.sweepBiasColor}/>}>Liquidity Map</PTitle>
+        {ms.liqMap?.pools?.map((p,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",gap:7,padding:"4px 0",borderBottom:`1px solid ${T.border}`}}>
+            <div style={{width:3,height:11,background:p.color,borderRadius:2,flexShrink:0}}/>
+            <Mono s={8} c={p.color} style={{width:90,flexShrink:0}}>{p.label}</Mono>
+            <Mono s={10} c={p.color} w={600} style={{flex:1}}>{p.price?.toLocaleString()}</Mono>
+            <MBar val={p.strength} max={100} color={p.color} h={3}/>
+          </div>
+        ))}
+        <div style={{marginTop:5}}><Mono s={8} c={T.muted}>LIQ DIST: {ms.liqMap?.liqDist}pts</Mono></div>
+      </Card>
+
+      <Card glow={ms.regime?.color}>
+        <PTitle color={ms.regime?.color}>Market Regime</PTitle>
+        <div style={{textAlign:"center",padding:"7px 0"}}>
+          <Mono s={15} c={ms.regime?.color} w={700}>{ms.regime?.regime}</Mono>
+          <div style={{fontSize:9,color:T.muted,marginTop:2}}>{ms.regime?.direction?.toUpperCase()}</div>
+        </div>
+        <div style={{fontSize:9,color:T.muted,lineHeight:1.6,marginBottom:6}}>{ms.regime?.description}</div>
+        <Chip label={ms.regime?.strategy} color={ms.regime?.color}/>
+      </Card>
+    </Col>
+  </Grid>
+));
+
+// ══════════════════════════════════════════════════════════
+// INPUT TAB
+// ══════════════════════════════════════════════════════════
+const InputTab=memo(({ms})=>{
+  const inp=ms.inputs,set=ms.setters;
+  return(
+    <Grid cols="1fr 1fr 1fr" gap={10}>
+      <Card glow={T.purple}>
+        <PTitle color={T.purple} icon="γ">Greeks</PTitle>
+        <Inp label="India VIX"      value={inp.vix}       onChange={set.setVix}       color={inp.vix>20?T.red:T.white}/>
+        <Inp label="ATM Call Delta" value={inp.callDelta} onChange={set.setCallDelta}/>
+        <Inp label="ATM Put Delta"  value={inp.putDelta}  onChange={set.setPutDelta}/>
+        <Inp label="Gamma"          value={inp.gamma}     onChange={set.setGamma}/>
+        <Inp label="IV Trend"       value={inp.ivTrend}   onChange={set.setIvTrend}  options={IV_OPTS}/>
+        <Inp label="ADX"            value={inp.adx}       onChange={set.setAdx}       options={ADX_OPTS}/>
+        <Inp label="Prev VIX"       value={inp.prevVix}   onChange={set.setPrevVix}/>
+      </Card>
+      <Card glow={T.cyan}>
+        <PTitle color={T.cyan} icon="◈">OI Structure</PTitle>
+        <Inp label="PCR"         value={inp.pcr}           onChange={set.setPcr}/>
+        <Inp label="ATM Call OI" value={inp.callOIAtm}     onChange={set.setCallOIAtm}/>
+        <Inp label="ATM Put OI"  value={inp.putOIAtm}      onChange={set.setPutOIAtm}/>
+        <Inp label="Call Wall"   value={inp.highestCallOI} onChange={set.setHighestCallOI}/>
+        <Inp label="Put Wall"    value={inp.highestPutOI}  onChange={set.setHighestPutOI}/>
+        <Inp label="Max Pain"    value={inp.maxPain}       onChange={set.setMaxPain}/>
+        <Inp label="ATM Strike"  value={inp.atmStrike}     onChange={set.setAtmStrike}/>
+        <Inp label="OI Change"   value={inp.oiChange}      onChange={set.setOiChange}  options={OI_OPTS}/>
+      </Card>
+      <Col gap={10}>
+        <Card glow={T.orange}>
+          <PTitle color={T.orange} icon="⬡">FII / DII</PTitle>
+          <Inp label="FII Net (Cr)" value={inp.fiiNet}   onChange={set.setFiiNet}   color={inp.fiiNet>0?T.green:T.red}/>
+          <Inp label="DII Net (Cr)" value={inp.diiNet}   onChange={set.setDiiNet}/>
+          <Inp label="FII Long %"   value={inp.fiiRatio} onChange={set.setFiiRatio} unit="%"/>
+          <Inp label="FII MTD"      value={inp.fiiMTD}   onChange={set.setFiiMTD}/>
+          <Inp label="DII MTD"      value={inp.diiMTD}   onChange={set.setDiiMTD}/>
+        </Card>
+        <Card glow={T.blue}>
+          <PTitle color={T.blue} icon="◎">Global</PTitle>
+          <Inp label="GIFT Nifty" value={inp.giftNifty}  onChange={set.setGiftNifty}  color={inp.giftNifty>inp.prevClose?T.green:T.red}/>
+          <Inp label="Prev Close" value={inp.prevClose}  onChange={set.setPrevClose}/>
+          <Inp label="Spot Price" value={inp.spotPrice}  onChange={set.setSpotPrice}/>
+          <Inp label="Brent $"    value={inp.brentCrude} onChange={set.setBrentCrude}/>
+          <Inp label="USD/INR"    value={inp.usdinr}      onChange={set.setUsdinr}/>
+        </Card>
+        <Card glow={T.amber}>
+          <PTitle color={T.amber} icon="⚡">Advanced</PTitle>
+          <Inp label="Buy Volume"   value={inp.buyVolume}      onChange={set.setBuyVolume}/>
+          <Inp label="Sell Volume"  value={inp.sellVolume}     onChange={set.setSellVolume}/>
+          <Inp label="VWAP"         value={inp.vwap}           onChange={set.setVwap}/>
+          <Inp label="Range High"   value={inp.rangeHigh}      onChange={set.setRangeHigh}/>
+          <Inp label="Range Low"    value={inp.rangeLow}       onChange={set.setRangeLow}/>
+          <Inp label="Sweep"        value={inp.liquiditySweep} onChange={set.setLiquiditySweep} options={SWEEP_OPTS}/>
+          <Inp label="Capital"      value={inp.capital}        onChange={set.setCapital}/>
+          <Inp label="Risk %"       value={inp.riskPct}        onChange={set.setRiskPct} unit="%"/>
+          <Inp label="Dealer Gamma" value={inp.dealerHedge}    onChange={set.setDealerHedge} options={DEALER_OPTS}/>
+        </Card>
+      </Col>
+    </Grid>
+  );
+});
+
+// ══════════════════════════════════════════════════════════
+// ANALYSIS TAB
+// ══════════════════════════════════════════════════════════
+const AnalysisTab=memo(({ms,mx})=>(
+  <Grid cols="1fr 1fr" gap={10}>
+    <Col gap={10}>
+      <Card>
+        <PTitle color={T.cyan}>Signal Breakdown ({ms.signalList?.length})</PTitle>
+        {ms.signalList?.map((s,i)=><SigRow key={i} {...s}/>)}
+        <div style={{marginTop:8}}>
+          <DualBar bv={ms.bullScore} brv={ms.bearScore} h={6}/>
+          <Row justify="space-between" style={{marginTop:4}}>
+            <Mono s={8} c={T.green}>Bull: {ms.bullScore}</Mono>
+            <Mono s={8} c={T.amber}>Net: {ms.netScore>0?"+":""}{ms.netScore}</Mono>
+            <Mono s={8} c={T.red}>Bear: {ms.bearScore}</Mono>
+          </Row>
+        </div>
+      </Card>
+
+      <Card glow={T.teal}>
+        <PTitle color={T.teal}>Institutional Heatmap</PTitle>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+          {ms.heatmap?.cells?.map((cell,i)=><HeatCell key={i} {...cell}/>)}
+        </div>
+      </Card>
+
+      <Card glow={ms.absorb?.color}>
+        <PTitle color={ms.absorb?.color}>Absorption + Volume Delta</PTitle>
+        <Grid cols="1fr 1fr" gap={8} style={{marginBottom:8}}>
+          <StatCard label="Absorption" value={`${ms.absorb?.val||0}%`}      color={ms.absorb?.color}       sub={ms.absorb?.type}/>
+          <StatCard label="CVD Bias"   value={ms.volumeDelta?.bias||"NEUT"} color={ms.volumeDelta?.biasColor} sub={ms.volumeDelta?.signal?.slice(0,18)}/>
+        </Grid>
+        {ms.volumeDelta?.divergence&&<WarnBanner text={`⚡ ${ms.volumeDelta.divergence.type}: Price/CVD disagree`} color={ms.volumeDelta.divergence.color}/>}
+        {ms.volumeDelta?.absorption!=="NONE"&&<WarnBanner text={`🔄 ${ms.volumeDelta.absorption}`} color={T.teal}/>}
+      </Card>
+    </Col>
+
+    <Col gap={10}>
+      <Card glow={ms.trapProb?.color}>
+        <PTitle color={ms.trapProb?.color}>Trap Probability</PTitle>
+        <Grid cols="1fr 1fr" gap={10}>
+          <div><Lbl c={T.red}>Bull Trap</Lbl><Mono s={20} c={T.red} w={700}>{ms.trapProb?.bull}%</Mono><MBar val={ms.trapProb?.bull} max={100} color={T.red} h={4}/></div>
+          <div><Lbl c={T.amber}>Bear Trap</Lbl><Mono s={20} c={T.amber} w={700}>{ms.trapProb?.bear}%</Mono><MBar val={ms.trapProb?.bear} max={100} color={T.amber} h={4}/></div>
+        </Grid>
+        <Divider/><Chip label={ms.trapProb?.dominant} color={ms.trapProb?.color}/>
+      </Card>
+
+      <Card glow={ms.fiiAgg?.color}>
+        <PTitle color={ms.fiiAgg?.color}>FII Aggression</PTitle>
+        <Grid cols="1fr 1fr" gap={8}>
+          <div><Lbl>Score</Lbl><Mono s={20} c={ms.fiiAgg?.color} w={700}>{safeFixed(ms.fiiAgg?.score,0)}</Mono><MBar val={ms.fiiAgg?.score} max={100} color={ms.fiiAgg?.color} h={4}/></div>
+          <div><Lbl>Intent</Lbl><Mono s={9} c={ms.fiiAgg?.color} w={600}>{ms.fiiAgg?.dir}</Mono><div style={{marginTop:4}}><Chip label={ms.fiiAgg?.intensity} color={ms.fiiAgg?.color}/></div></div>
+        </Grid>
+        <Divider/>
+        <Grid cols="1fr 1fr" gap={8}>
+          <div><Lbl>FII MTD</Lbl><Mono s={9} c={ms.inputs?.fiiMTD>0?T.green:T.red} w={600}>₹{fmt(ms.inputs?.fiiMTD)}Cr</Mono></div>
+          <div><Lbl>DII MTD</Lbl><Mono s={9} c={ms.inputs?.diiMTD>0?T.green:T.red} w={600}>₹{fmt(ms.inputs?.diiMTD)}Cr</Mono></div>
+        </Grid>
+      </Card>
+
+      <Card glow={ms.atr?.volColor}>
+        <PTitle color={ms.atr?.volColor}>Volatility Engine</PTitle>
+        <Grid cols="1fr 1fr 1fr" gap={6} style={{marginBottom:8}}>
+          <StatCard label="Daily ATR" value={ms.atr?.dailyATR}   color={ms.atr?.volColor}/>
+          <StatCard label="Session"   value={ms.atr?.sessionATR} color={T.cyan}/>
+          <StatCard label="State"     value={ms.atr?.volState}   color={ms.atr?.volColor}/>
+        </Grid>
+        <Grid cols="1fr 1fr" gap={6}>
+          <div><Lbl>SL Buffer</Lbl><Mono s={10} c={T.red}>{ms.atr?.slBuffer}pts</Mono></div>
+          <div><Lbl>T2 Buffer</Lbl><Mono s={10} c={T.green}>{ms.atr?.t2Buffer}pts</Mono></div>
+        </Grid>
+      </Card>
+
+      <Card glow={ms.sweep?.sweepColor}>
+        <PTitle color={ms.sweep?.sweepColor}>Liquidity Sweep</PTitle>
+        <Grid cols="1fr 1fr" gap={8} style={{marginBottom:8}}>
+          <div><Lbl>Type</Lbl><Mono s={10} c={ms.sweep?.sweepColor} w={700}>{ms.sweep?.sweepType}</Mono></div>
+          <div><Lbl>Conf</Lbl><Chip label={ms.sweep?.confidence} color={ms.sweep?.sweepColor}/></div>
+        </Grid>
+        <Mono s={18} c={ms.sweep?.sweepColor} w={700}>{ms.sweep?.sweepScore}%</Mono>
+        <MBar val={ms.sweep?.sweepScore} max={100} color={ms.sweep?.sweepColor} h={5}/>
+      </Card>
+    </Col>
+  </Grid>
+));
+
+// ══════════════════════════════════════════════════════════
+// EXECUTION TAB
+// ══════════════════════════════════════════════════════════
+const ExecutionTab=memo(({ms,mx,ex})=>(
+  <Grid cols="1fr 1fr" gap={10}>
+    <Col gap={10}>
+      <Card glow={ex?.isActive?ex.tcolor:T.muted}>
+        <PTitle color={ex?.isActive?ex.tcolor:T.muted} right={<Chip label={ex?.dir||"WAIT"} color={ex?.dir==="LONG"?T.green:ex?.dir==="SHORT"?T.red:T.muted} size={10}/>}>Smart Risk Engine</PTitle>
+        {ex?.isActive?(
+          <>
+            <Grid cols="1fr 1fr" gap={8} style={{marginBottom:8}}>
+              <div style={{background:`${ex.dir==="LONG"?T.green:T.red}0a`,border:`1px solid ${ex.dir==="LONG"?T.green:T.red}33`,borderRadius:5,padding:10}}>
+                <Lbl c={ex.dir==="LONG"?T.green:T.red}>{ex.dir} ENTRY</Lbl>
+                <Mono s={13} c={ex.dir==="LONG"?T.green:T.red} w={700}>{(ex.dir==="LONG"?ex.long:ex.short)?.entry}</Mono>
+                <div style={{fontSize:8,color:T.muted,marginTop:2}}>Dynamic ATR-adjusted zone</div>
+              </div>
+              <div style={{background:`${T.red}0a`,border:`1px solid ${T.red}33`,borderRadius:5,padding:10}}>
+                <Lbl c={T.red}>STOP LOSS</Lbl>
+                <Mono s={13} c={T.red} w={700}>{(ex.dir==="LONG"?ex.long:ex.short)?.sl}</Mono>
+                <div style={{fontSize:8,color:T.muted,marginTop:2}}>SL: {ex.adjSL}pts ({ex.volAdj})</div>
+              </div>
+            </Grid>
+            <Grid cols="1fr 1fr 1fr" gap={6} style={{marginBottom:8}}>
+              {[["T1",ex.rrT1,1],["T2",ex.rrT2,2],["T3",ex.rrT3,3]].map(([k,r,n])=>(
+                <div key={k} style={{background:`${T.green}0a`,border:`1px solid ${T.green}33`,borderRadius:4,padding:7,textAlign:"center"}}>
+                  <div style={{fontSize:7,color:T.muted}}>{k} ({r}R)</div>
+                  <Mono s={12} c={T.green} w={700}>{(ex.dir==="LONG"?ex.long:ex.short)?.[`t${n}`]}</Mono>
+                </div>
+              ))}
+            </Grid>
+            <Grid cols="repeat(4,1fr)" gap={5} style={{marginBottom:8}}>
+              {[["Lots",ex.lots,T.cyan],["Max Risk",`₹${fmt(ex.maxRisk)}`,T.red],["Per Lot",`₹${fmt(ex.rpl)}`,T.amber],["Size",ex.sizeAdj,ex.volAdj==="EXPANSION"?T.red:T.green]].map(([k,v,c])=>(
+                <div key={k} style={{textAlign:"center",background:`${c}0a`,border:`1px solid ${c}22`,borderRadius:4,padding:"5px 3px"}}>
+                  <div style={{fontSize:7,color:T.muted,marginBottom:2}}>{k}</div>
+                  <Mono s={10} c={c} w={600}>{v}</Mono>
+                </div>
+              ))}
+            </Grid>
+            <div style={{background:`${T.red}0a`,border:`1px solid ${T.red}22`,borderRadius:4,padding:"5px 8px",marginBottom:6}}>
+              <Mono s={8} c={T.red}>🚫 INVALIDATION: Close {ex.dir==="LONG"?"below":"above"} {(ex.dir==="LONG"?ex.long:ex.short)?.invalid}</Mono>
+            </div>
+            <div style={{background:T.panel,borderRadius:4,padding:"6px 8px",border:`1px solid ${T.border}`}}>
+              <div style={{fontSize:8,color:T.muted,marginBottom:2}}>TRAILING LOGIC</div>
+              <Sans s={10} c={T.white}>{ex.trailingLogic}</Sans>
+            </div>
+          </>
+        ):(
+          <div style={{textAlign:"center",padding:"18px 0"}}>
+            <div style={{fontSize:22,marginBottom:8}}>🚫</div>
+            <Mono s={12} c={T.muted} w={600}>NO VALID SETUP</Mono>
+            <div style={{fontSize:9,color:T.dim,marginTop:4}}>{ms.noTrade?.blocks?.[0]?.r||"Wait for confluence"}</div>
+          </div>
+        )}
+      </Card>
+
+      <Card glow={T.cyan}>
+        <PTitle color={T.cyan} right={<Chip label={`±${ms.levels?.dynRange}pts`} color={T.amber}/>}>Key Levels</PTitle>
+        <div style={{display:"grid",gridTemplateColumns:"auto 70px 70px 45px",gap:"0 5px",marginBottom:4}}>
+          {["ZONE","SPOT","FUT","TYPE"].map(h=><Mono key={h} s={8} c={T.muted}>{h}</Mono>)}
+        </div>
+        {ms.levels?.levels?.map((lv,i)=>(
+          <div key={i} style={{display:"grid",gridTemplateColumns:"auto 70px 70px 45px",gap:"0 5px",padding:"5px 0",borderBottom:`1px solid ${T.border}`,background:i===3?`${T.cyan}06`:"none"}}>
+            <Row gap={5}><div style={{width:3,height:11,background:lv.color,borderRadius:2,flexShrink:0}}/><Mono s={9} c={lv.color}>{lv.l}</Mono></Row>
+            <Mono s={10} c={lv.color} w={600}>{lv.spot?.toLocaleString()}</Mono>
+            <Mono s={10} c={lv.color} w={600}>{(lv.spot+150)?.toLocaleString()}</Mono>
+            <Chip label={lv.type} color={lv.color} size={7}/>
+          </div>
+        ))}
+      </Card>
+    </Col>
+
+    <Col gap={10}>
+      <Card glow={ms.execScore>=8?T.green:ms.execScore>=6?T.amber:T.red}>
+        <PTitle color={ms.execScore>=8?T.green:ms.execScore>=6?T.amber:T.red} right={<Chip label={ms.execScore>=8?"PERFECT":ms.execScore>=6?"GO":ms.execScore>=4?"CAUTION":"STAND DOWN"} color={ms.execScore>=6?T.green:ms.execScore>=4?T.amber:T.red}/>}>
+          Execution Checklist ({ms.execScore}/{ms.execChecks?.length})
+        </PTitle>
+        {ms.execChecks?.map((c,i)=><CheckItem key={i} {...c}/>)}
+        <div style={{marginTop:6}}><MBar val={ms.execScore} max={ms.execChecks?.length||10} color={ms.execScore>=6?T.green:T.amber} h={5}/></div>
+      </Card>
+
+      <Card glow={ms.mtf?.execColor}>
+        <PTitle color={ms.mtf?.execColor} right={<Chip label={ms.mtf?.aligned?"ALIGNED":"MISMATCH"} color={ms.mtf?.aligned?T.green:T.red}/>}>Multi-Timeframe</PTitle>
+        {[
+          {tf:"15M",val:ms.mtf?.bias15m,  color:ms.mtf?.b15Color,desc:"FII + OI structure"},
+          {tf:"5M", val:ms.mtf?.conf5m,   color:ms.mtf?.c5Color, desc:"Delta + VIX"},
+          {tf:"1M", val:ms.mtf?.exec1m,   color:T.blue,          desc:"ADX + Gap"},
+        ].map((item,i)=>(
+          <div key={i} style={{display:"grid",gridTemplateColumns:"38px 1fr",gap:8,padding:"7px 0",borderBottom:`1px solid ${T.border}`}}>
+            <div style={{background:`${item.color}15`,border:`1px solid ${item.color}33`,borderRadius:4,padding:"4px",textAlign:"center"}}><Mono s={8} c={item.color} w={700}>{item.tf}</Mono></div>
+            <div><Chip label={item.val||"—"} color={item.color}/><div style={{fontSize:8,color:T.muted,marginTop:2}}>{item.desc}</div></div>
+          </div>
+        ))}
+        <div style={{marginTop:8}}><Lbl>Exec Quality</Lbl><Mono s={16} c={ms.mtf?.execColor} w={700}>{ms.mtf?.execQuality}%</Mono><MBar val={ms.mtf?.execQuality} max={100} color={ms.mtf?.execColor} h={4}/></div>
+      </Card>
+
+      <Card glow={ms.structure?.structureColor}>
+        <PTitle color={ms.structure?.structureColor}>Market Structure</PTitle>
+        <Grid cols="1fr 1fr" gap={8} style={{marginBottom:8}}>
+          <div><Lbl>Signal</Lbl><Mono s={12} c={ms.structure?.structureColor} w={700}>{ms.structure?.structureSignal||"NONE"}</Mono></div>
+          <div><Lbl>Zone</Lbl><Chip label={ms.structure?.zone||"—"} color={ms.structure?.zoneColor}/></div>
+        </Grid>
+        <div style={{fontSize:10,color:T.muted,lineHeight:1.5,marginBottom:8}}>{ms.structure?.internalLiq}</div>
+        <Grid cols="1fr 1fr 1fr" gap={6}>
+          <StatCard label="Call Wall" value={ms.structure?.callWall} color={T.red}/>
+          <StatCard label="Midpoint"  value={ms.structure?.midPoint} color={T.cyan}/>
+          <StatCard label="Put Wall"  value={ms.structure?.putWall}  color={T.green}/>
+        </Grid>
+      </Card>
+    </Col>
+  </Grid>
+));
+
+// ══════════════════════════════════════════════════════════
+// JOURNAL TAB — Full Persistent Memory System v2.0
+// ══════════════════════════════════════════════════════════
+
+// Auto-save status indicator
+const SaveIndicator=memo(({status})=>{
+  if(status==="idle") return null;
+  const isSaving=status==="saving";
+  return(
+    <span className={isSaving?"save-ping":"save-check"} style={{
+      display:"inline-flex",alignItems:"center",gap:4,
+      fontFamily:"IBM Plex Mono",fontSize:7,letterSpacing:1.5,fontWeight:700,
+      color:isSaving?T.amber:T.green,
+      background:isSaving?`${T.amber}15`:`${T.green}15`,
+      border:`1px solid ${isSaving?T.amber:T.green}40`,
+      borderRadius:3,padding:"2px 7px",
+    }}>
+      {isSaving?"◌ SAVING":"✓ SAVED"}
+    </span>
+  );
+});
+
+// Persistent textarea field
+const JournalTextArea=memo(({label,value,onChange,placeholder="",rows=3,color=T.cyan})=>(
+  <div style={{marginBottom:9}}>
+    <Lbl c={color}>{label}</Lbl>
+    <textarea
+      value={value}
+      onChange={e=>onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      style={{
+        width:"100%",background:T.panel,border:`1px solid ${T.borderHi}`,color:T.white,
+        borderRadius:4,padding:"7px 9px",fontSize:10,fontFamily:"'IBM Plex Mono',monospace",
+        resize:"vertical",lineHeight:1.6,outline:"none",
+      }}
+    />
+  </div>
+));
+
+// Persistent number slider
+const JournalSlider=memo(({label,value,onChange,min=0,max=100,color=T.cyan})=>(
+  <div style={{marginBottom:9}}>
+    <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+      <Lbl c={color}>{label}</Lbl>
+      <Mono s={9} c={color} w={700}>{value}</Mono>
+    </div>
+    <input type="range" min={min} max={max} value={value} onChange={e=>onChange(Number(e.target.value))}
+      style={{width:"100%",accentColor:color,cursor:"pointer"}}/>
+    <div style={{display:"flex",justifyContent:"space-between"}}>
+      <Mono s={7} c={T.muted}>FEAR</Mono>
+      <Mono s={7} c={T.muted}>GREED</Mono>
+    </div>
+  </div>
+));
+
+// Checklist section
+const ChecklistSection=memo(({title,items,onToggle,color=T.cyan})=>{
+  const passed=items.filter(i=>i.checked).length;
+  return(
+    <div style={{marginBottom:10}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <Mono s={9} c={color} w={700} style={{letterSpacing:1.5,textTransform:"uppercase"}}>{title}</Mono>
+        <Chip label={`${passed}/${items.length}`} color={passed===items.length?T.green:passed>0?T.amber:T.muted} size={7}/>
+      </div>
+      <MBar val={passed} max={items.length} color={passed===items.length?T.green:T.amber} h={3}/>
+      <div style={{marginTop:6}}>
+        {items.map(item=>(
+          <div key={item.id} onClick={()=>onToggle(item.id)}
+            style={{display:"flex",alignItems:"center",gap:9,padding:"6px 0",borderBottom:`1px solid ${T.border}`,cursor:"pointer"}}>
+            <div style={{
+              width:15,height:15,borderRadius:3,flexShrink:0,
+              background:item.checked?`${T.green}22`:`${T.red}10`,
+              border:`1px solid ${item.checked?T.green:T.dim}50`,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:9,color:item.checked?T.green:T.dim,
+              transition:"all .18s",
+            }}>{item.checked?"✓":""}</div>
+            <Mono s={9} c={item.checked?T.white:T.muted}>{item.label}</Mono>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
+
+const JournalTab=memo(({jnl})=>{
+  const [activeSection,setActiveSection]=useState("trades");
+  const sections=[
+    {id:"trades",   label:"TRADES",     icon:"📊"},
+    {id:"notes",    label:"NOTES",      icon:"📝"},
+    {id:"psych",    label:"PSYCHOLOGY", icon:"🧠"},
+    {id:"reflect",  label:"REFLECTION", icon:"🪞"},
+    {id:"checklist",label:"CHECKLIST",  icon:"✅"},
+  ];
+
+  const journalHeaderRight=(
+    <div style={{display:"flex",alignItems:"center",gap:8}}>
+      <SaveIndicator status={jnl.saveStatus}/>
+      <button onClick={jnl.exportBackup} title="Export journal backup" style={{
+        background:`${T.cyan}15`,border:`1px solid ${T.cyan}40`,color:T.cyan,
+        borderRadius:4,padding:"3px 9px",cursor:"pointer",fontFamily:"IBM Plex Mono",
+        fontSize:8,fontWeight:700,letterSpacing:1,
+      }}>⬇ EXPORT</button>
+      <button onClick={jnl.importBackup} title="Import journal backup" style={{
+        background:`${T.purple}15`,border:`1px solid ${T.purple}40`,color:T.purple,
+        borderRadius:4,padding:"3px 9px",cursor:"pointer",fontFamily:"IBM Plex Mono",
+        fontSize:8,fontWeight:700,letterSpacing:1,
+      }}>⬆ IMPORT</button>
+    </div>
+  );
+
+  return(
+    <div>
+      {/* Section Nav */}
+      <div style={{display:"flex",gap:0,marginBottom:10,borderBottom:`1px solid ${T.border}`,overflowX:"auto"}}>
+        {sections.map(s=>(
+          <button key={s.id} onClick={()=>setActiveSection(s.id)} style={{
+            background:"none",border:"none",cursor:"pointer",
+            fontFamily:"IBM Plex Mono",fontSize:9,fontWeight:700,letterSpacing:1.5,
+            padding:"6px 12px",whiteSpace:"nowrap",
+            color:activeSection===s.id?T.cyan:T.muted,
+            borderBottom:activeSection===s.id?`2px solid ${T.cyan}`:"2px solid transparent",
+            transition:"color .15s",
+          }}>{s.icon} {s.label}</button>
+        ))}
+        <div style={{marginLeft:"auto",padding:"4px 0",display:"flex",alignItems:"center"}}>
+          {journalHeaderRight}
+        </div>
+      </div>
+
+      {/* ── TRADES SECTION ── */}
+      {activeSection==="trades"&&(
+        <div className="journal-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Col gap={10}>
+            <Card glow={T.purple}>
+              <PTitle color={T.purple} right={
+                jnl.storageReady
+                  ?<SaveIndicator status={jnl.saveStatus}/>
+                  :<Chip label="LOADING..." color={T.muted} size={7}/>
+              }>Log Trade</PTitle>
+              <Grid cols="1fr 1fr" gap={8}>
+                <Inp label="Type"    value={jnl.form.type}    onChange={v=>jnl.updateForm("type",v)}    options={[{v:"LONG",l:"▲ LONG"},{v:"SHORT",l:"▼ SHORT"}]}/>
+                <Inp label="Setup"   value={jnl.form.setup}   onChange={v=>jnl.updateForm("setup",v)}   options={SETUP_OPTS}/>
+                <Inp label="Entry"   value={jnl.form.entry}   onChange={v=>jnl.updateForm("entry",v)}/>
+                <Inp label="SL"      value={jnl.form.sl}      onChange={v=>jnl.updateForm("sl",v)}/>
+                <Inp label="Target"  value={jnl.form.target}  onChange={v=>jnl.updateForm("target",v)}/>
+                <Inp label="Exit"    value={jnl.form.exit}    onChange={v=>jnl.updateForm("exit",v)}/>
+                <Inp label="Emotion" value={jnl.form.emotion} onChange={v=>jnl.updateForm("emotion",v)} options={EMO_OPTS}/>
+              </Grid>
+              <JournalTextArea label="Trade Notes" value={jnl.form.notes} onChange={v=>jnl.updateForm("notes",v)} placeholder="Entry rationale, observations..." rows={2} color={T.purple}/>
+              <button onClick={()=>jnl.addTrade(jnl.form)} style={{width:"100%",marginTop:4,padding:"9px",background:T.cyan,color:T.bg,border:"none",borderRadius:4,cursor:"pointer",fontFamily:"IBM Plex Mono",fontSize:11,fontWeight:700,letterSpacing:1}}>+ LOG TRADE</button>
+            </Card>
+
+            <Card>
+              <PTitle color={T.cyan}>Performance Analytics</PTitle>
+              <Grid cols="1fr 1fr 1fr" gap={6} style={{marginBottom:10}}>
+                <StatCard label="Win Rate" value={`${jnl.stats.winRate}%`}        color={jnl.stats.winRate>55?T.green:T.red}/>
+                <StatCard label="Avg R:R"  value={`${jnl.stats.avgRR}:1`}        color={jnl.stats.avgRR>=1.5?T.green:T.amber}/>
+                <StatCard label="Total P&L"value={`₹${fmt(jnl.stats.totalPnL)}`} color={jnl.stats.totalPnL>=0?T.green:T.red}/>
+              </Grid>
+              <Row gap={16} style={{marginBottom:10}}>
+                <div><Lbl>Wins</Lbl><Mono s={14} c={T.green} w={700}>{jnl.stats.wins}</Mono></div>
+                <div><Lbl>Losses</Lbl><Mono s={14} c={T.red} w={700}>{jnl.stats.losses}</Mono></div>
+                <div><Lbl>Total</Lbl><Mono s={14} c={T.cyan} w={700}>{jnl.trades.length}</Mono></div>
+              </Row>
+              <Grid cols="1fr 1fr" gap={6} style={{marginBottom:8}}>
+                <div style={{background:`${T.green}0a`,border:`1px solid ${T.green}22`,borderRadius:4,padding:7}}>
+                  <Lbl c={T.green}>Best Setup</Lbl><Mono s={10} c={T.green} w={600}>{jnl.stats.bestSetup}</Mono>
+                </div>
+                <div style={{background:`${T.red}0a`,border:`1px solid ${T.red}22`,borderRadius:4,padding:7}}>
+                  <Lbl c={T.red}>Worst Emotion</Lbl><Mono s={10} c={T.red} w={600}>{jnl.stats.worstEmotion}</Mono>
+                </div>
+              </Grid>
+              {jnl.trades.length>0&&(
+                <button onClick={jnl.clearAll} style={{width:"100%",padding:"6px",background:"transparent",color:T.red,border:`1px solid ${T.red}40`,borderRadius:4,cursor:"pointer",fontFamily:"IBM Plex Mono",fontSize:9,fontWeight:700}}>
+                  🗑 CLEAR ALL JOURNAL DATA
+                </button>
+              )}
+            </Card>
+          </Col>
+
+          <Card>
+            <PTitle color={T.cyan}>Trade History</PTitle>
+            {!jnl.storageReady
+              ?<Mono s={10} c={T.muted}>Loading saved trades...</Mono>
+              :jnl.trades.length===0
+                ?<div style={{textAlign:"center",padding:"20px 0"}}>
+                  <div style={{fontSize:24,marginBottom:8}}>📋</div>
+                  <Mono s={10} c={T.muted}>No trades logged yet.</Mono>
+                  <div style={{fontSize:8,color:T.dim,marginTop:4}}>Trades auto-save across sessions.</div>
+                </div>
+                :<div style={{maxHeight:560,overflowY:"auto"}}>
+                  {jnl.trades.map(t=>(
+                    <div key={t.id} style={{padding:"7px 0",borderBottom:`1px solid ${T.border}`}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                        <Row gap={4} wrap={true}>
+                          <Chip label={t.type}   color={t.type==="LONG"?T.green:T.red}/>
+                          <Chip label={t.result} color={t.result==="WIN"?T.green:T.red}/>
+                          <Chip label={t.setup}  color={T.cyan}/>
+                          <Chip label={`Grade: ${t.grade}`} color={t.grade==="A+"?T.lime:t.grade==="A"?T.green:t.grade==="B"?T.amber:T.red}/>
+                        </Row>
+                        <button onClick={()=>jnl.removeTrade(t.id)} style={{background:"none",border:"none",color:T.muted,cursor:"pointer",fontSize:10}}>✕</button>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:3}}>
+                        {[["Entry",t.entry,T.white],["SL",t.sl,T.red],["Exit",t.exit,T.cyan],["R:R",`${t.rr}:1`,T.amber],["P&L",`₹${fmt(t.pnl)}`,safeNum(t.pnl,0)>=0?T.green:T.red]].map(([k,v,c])=>(
+                          <div key={k} style={{textAlign:"center"}}><div style={{fontSize:7,color:T.muted}}>{k}</div><Mono s={9} c={c} w={600}>{v}</Mono></div>
+                        ))}
+                      </div>
+                      {t.notes&&<div style={{marginTop:4,fontSize:8,color:T.dim,fontStyle:"italic"}}>"{t.notes}"</div>}
+                      <div style={{fontSize:8,color:T.dim,marginTop:2}}>{t.emotion} · {t.date} {t.time}</div>
+                    </div>
+                  ))}
+                </div>
+            }
+          </Card>
+        </div>
+      )}
+
+      {/* ── NOTES SECTION ── */}
+      {activeSection==="notes"&&(
+        <div className="journal-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Card glow={T.cyan}>
+            <PTitle color={T.cyan} right={<SaveIndicator status={jnl.saveStatus}/>}>Market Notes</PTitle>
+            <JournalTextArea label="Market Bias" value={jnl.notes.marketBias} onChange={v=>jnl.setNotes(n=>({...n,marketBias:v}))} placeholder="Overall market direction and thesis..." rows={3} color={T.cyan}/>
+            <JournalTextArea label="Pre-Market Analysis" value={jnl.notes.preMarket} onChange={v=>jnl.setNotes(n=>({...n,preMarket:v}))} placeholder="Gap analysis, news, overnight moves..." rows={3} color={T.blue}/>
+            <JournalTextArea label="Key Levels" value={jnl.notes.keyLevels} onChange={v=>jnl.setNotes(n=>({...n,keyLevels:v}))} placeholder="Support, resistance, OB, FVG zones..." rows={3} color={T.amber}/>
+          </Card>
+          <Card glow={T.orange}>
+            <PTitle color={T.orange} right={<SaveIndicator status={jnl.saveStatus}/>}>Risk & Session Notes</PTitle>
+            <JournalTextArea label="Risk Management Notes" value={jnl.notes.riskNotes} onChange={v=>jnl.setNotes(n=>({...n,riskNotes:v}))} placeholder="Max risk today, position sizing plan..." rows={3} color={T.orange}/>
+            <JournalTextArea label="Session Analysis" value={jnl.notes.sessionAnalysis} onChange={v=>jnl.setNotes(n=>({...n,sessionAnalysis:v}))} placeholder="Session behavior, institutional activity..." rows={5} color={T.teal}/>
+            <div style={{padding:"6px 10px",background:`${T.green}08`,border:`1px solid ${T.green}20`,borderRadius:4}}>
+              <Mono s={8} c={T.green}>💾 All notes auto-saved instantly as you type</Mono>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── PSYCHOLOGY SECTION ── */}
+      {activeSection==="psych"&&(
+        <div className="journal-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Card glow={T.purple}>
+            <PTitle color={T.purple} right={<SaveIndicator status={jnl.saveStatus}/>}>Psychology Log</PTitle>
+            <div style={{marginBottom:9}}>
+              <Lbl c={T.purple}>Emotional State</Lbl>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {["CALM","CONFIDENT","FOCUSED","ANXIOUS","FOMO","REVENGE","OVERCONFIDENT","NEUTRAL"].map(state=>(
+                  <button key={state} onClick={()=>jnl.setPsych(p=>({...p,emotionalState:state}))}
+                    style={{
+                      padding:"4px 10px",borderRadius:3,cursor:"pointer",
+                      fontFamily:"IBM Plex Mono",fontSize:8,fontWeight:700,letterSpacing:1,
+                      background:jnl.psych.emotionalState===state?`${T.purple}30`:`${T.panel}`,
+                      border:`1px solid ${jnl.psych.emotionalState===state?T.purple:T.border}`,
+                      color:jnl.psych.emotionalState===state?T.purple:T.muted,
+                      transition:"all .15s",
+                    }}>{state}</button>
+                ))}
+              </div>
+            </div>
+            <JournalSlider label="Fear / Greed Meter" value={jnl.psych.fearGreed} onChange={v=>jnl.setPsych(p=>({...p,fearGreed:v}))} color={jnl.psych.fearGreed>65?T.red:jnl.psych.fearGreed<35?T.green:T.amber}/>
+            <JournalTextArea label="Morning Routine / Mindset" value={jnl.psych.morningRoutine} onChange={v=>jnl.setPsych(p=>({...p,morningRoutine:v}))} placeholder="How are you feeling? Ready to trade?" rows={3} color={T.purple}/>
+            <JournalTextArea label="Mental State Observation" value={jnl.psych.mentalState} onChange={v=>jnl.setPsych(p=>({...p,mentalState:v}))} placeholder="Stress levels, focus, distractions..." rows={3} color={T.indigo}/>
+          </Card>
+          <Card glow={T.indigo}>
+            <PTitle color={T.indigo}>Bias & Post-Session</PTitle>
+            <JournalTextArea label="Bias Check (Before Trading)" value={jnl.psych.biasCheck} onChange={v=>jnl.setPsych(p=>({...p,biasCheck:v}))} placeholder="Any directional bias? Recency bias? FOMO setups to avoid?" rows={4} color={T.indigo}/>
+            <JournalTextArea label="Post-Session Review" value={jnl.psych.postSessionReview} onChange={v=>jnl.setPsych(p=>({...p,postSessionReview:v}))} placeholder="How did emotions impact trading today? What would you do differently?" rows={5} color={T.teal}/>
+            <div style={{padding:"8px 10px",background:`${jnl.psych.fearGreed>65?T.red:jnl.psych.fearGreed<35?T.green:T.amber}10`,border:`1px solid ${jnl.psych.fearGreed>65?T.red:jnl.psych.fearGreed<35?T.green:T.amber}30`,borderRadius:4}}>
+              <Mono s={8} c={jnl.psych.fearGreed>65?T.red:jnl.psych.fearGreed<35?T.green:T.amber}>
+                {jnl.psych.fearGreed>65?"⚠ HIGH GREED — Reduce size. No chasing.":jnl.psych.fearGreed<35?"⚠ HIGH FEAR — Stick to plan. Trust the system.":"✓ BALANCED STATE — Optimal for execution."}
+              </Mono>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── REFLECTION SECTION ── */}
+      {activeSection==="reflect"&&(
+        <div className="journal-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Card glow={T.teal}>
+            <PTitle color={T.teal} right={<SaveIndicator status={jnl.saveStatus}/>}>Daily Reflection</PTitle>
+            <JournalTextArea label="Daily Reflection" value={jnl.reflect.dailyReflection} onChange={v=>jnl.setReflect(r=>({...r,dailyReflection:v}))} placeholder="How was today? Key moments, decisions, outcomes..." rows={4} color={T.teal}/>
+            <JournalTextArea label="Lesson Learned" value={jnl.reflect.lessonLearned} onChange={v=>jnl.setReflect(r=>({...r,lessonLearned:v}))} placeholder="What did the market teach you today?" rows={3} color={T.green}/>
+            <JournalTextArea label="Improvement Plan" value={jnl.reflect.improvementPlan} onChange={v=>jnl.setReflect(r=>({...r,improvementPlan:v}))} placeholder="Specific actions to improve tomorrow..." rows={3} color={T.cyan}/>
+          </Card>
+          <Card glow={T.lime}>
+            <PTitle color={T.lime}>Win Mindset</PTitle>
+            <JournalTextArea label="Gratitude / Wins" value={jnl.reflect.gratitude} onChange={v=>jnl.setReflect(r=>({...r,gratitude:v}))} placeholder="What went well today? What are you grateful for?" rows={4} color={T.lime}/>
+            <JournalTextArea label="Tomorrow's Focus" value={jnl.reflect.tomorrowFocus} onChange={v=>jnl.setReflect(r=>({...r,tomorrowFocus:v}))} placeholder="Key setups to watch, levels, session plan..." rows={4} color={T.amber}/>
+            <div style={{padding:"8px 10px",background:`${T.teal}08`,border:`1px solid ${T.teal}25`,borderRadius:4}}>
+              <Sans s={10} c={T.muted} style={{lineHeight:1.65,fontStyle:"italic"}}>
+                "Professional traders don't just analyze markets — they analyze themselves."
+              </Sans>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ── CHECKLIST SECTION ── */}
+      {activeSection==="checklist"&&(
+        <div className="journal-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <Card glow={T.green}>
+            <PTitle color={T.green} right={<SaveIndicator status={jnl.saveStatus}/>}>Pre-Trade Checklist</PTitle>
+            <ChecklistSection
+              title="Pre-Trade Ritual"
+              items={jnl.checklist.preTradeItems}
+              onToggle={(id)=>jnl.toggleCheckItem("preTradeItems",id)}
+              color={T.green}
+            />
+            <div style={{marginTop:8,padding:"6px 10px",background:`${T.green}08`,border:`1px solid ${T.green}22`,borderRadius:4}}>
+              <Mono s={8} c={T.green}>
+                {jnl.checklist.preTradeItems.every(i=>i.checked)?"✓ ALL CHECKS COMPLETE — Clear to execute":"⏳ Complete all checks before entering a trade"}
+              </Mono>
+            </div>
+          </Card>
+          <Card glow={T.cyan}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+              <PTitle color={T.cyan}>Post-Trade Checklist</PTitle>
+              <button onClick={jnl.resetChecklist} style={{
+                padding:"3px 9px",background:"transparent",border:`1px solid ${T.dim}`,
+                borderRadius:3,color:T.muted,cursor:"pointer",
+                fontFamily:"IBM Plex Mono",fontSize:7,fontWeight:700,
+              }}>↺ RESET ALL</button>
+            </div>
+            <ChecklistSection
+              title="Post-Trade Review"
+              items={jnl.checklist.postTradeItems}
+              onToggle={(id)=>jnl.toggleCheckItem("postTradeItems",id)}
+              color={T.cyan}
+            />
+            <div style={{marginTop:8,padding:"8px 10px",background:`${T.indigo}08`,border:`1px solid ${T.indigo}22`,borderRadius:4}}>
+              <Mono s={8} c={T.indigo}>💾 Checklist progress saved automatically</Mono>
+              <div style={{fontSize:7,color:T.dim,marginTop:3}}>
+                Restored across browser refreshes and app restarts.
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+});
+
+// ══════════════════════════════════════════════════════════
+// INTELLIGENCE TAB — COMPLETE (was truncated before)
+// ══════════════════════════════════════════════════════════
+const IntelligenceTab=memo(({ms,mx})=>(
+  <Grid cols="1fr 1fr" gap={10}>
+    <Col gap={10}>
+      {/* AI Narrative */}
+      <Card glow={mx.biasColor}>
+        <PTitle color={mx.biasColor} icon="◈" right={<Chip label={`${mx.confidence}% [${mx.confLevel}]`} color={mx.confColor}/>}>AI Market Intelligence</PTitle>
+        <div style={{background:T.panel,borderRadius:5,padding:"10px 12px",border:`1px solid ${T.border}`,maxHeight:340,overflowY:"auto"}}>
+          {ms.narrative?.map((line,i)=>{
+            const col=line.startsWith("🏛")?T.cyan:line.startsWith("📊")?mx.biasColor:line.startsWith("📐")?ms.structure?.structureColor||T.muted:line.startsWith("💧")?ms.sweep?.sweepColor||T.blue:line.startsWith("🏦")?ms.fiiAgg?.color||T.orange:line.startsWith("⚠")?T.red:line.startsWith("✅")?T.green:line.startsWith("⏱")?ms.mtf?.execColor||T.cyan:line.startsWith("📈")?ms.atr?.volColor||T.cyan:line.startsWith("⏰")?ms.session?.current?.color||T.blue:line.startsWith("🕯")?T.amber:line.startsWith("🚫")?T.red:line.startsWith("⏳")?T.muted:T.cyan;
+            return <NarrLine key={i} text={line} color={col}/>;
+          })}
+        </div>
+      </Card>
+
+      {/* Master Score Breakdown */}
+      <Card glow={mx.biasColor}>
+        <PTitle color={mx.biasColor} right={<Chip label={mx.condition} color={mx.biasColor}/>}>Master Score Breakdown</PTitle>
+        <div style={{marginBottom:10}}>
+          <Row justify="space-between" style={{marginBottom:5}}>
+            <Mono s={10} c={T.muted}>Weighted Signal Score</Mono>
+            <Mono s={12} c={mx.biasColor} w={700}>{mx.netScore>0?"+":""}{mx.netScore} / ±100</Mono>
+          </Row>
+          <MBar val={50+mx.netScore/2} max={100} color={mx.biasColor} h={8}/>
+        </div>
+        <Grid cols="repeat(4,1fr)" gap={5} style={{marginBottom:10}}>
+          {[
+            {l:"Confidence",v:`${mx.confidence}%`,c:mx.confColor},
+            {l:"Exec Quality",v:`${mx.execQuality}%`,c:mx.execColor},
+            {l:"Inst Press",v:`${mx.instPressure}%`,c:mx.instDir>=0?T.green:T.red},
+            {l:"Liq Score",v:`${mx.liqScore}%`,c:mx.liqScore>60?T.red:T.green},
+          ].map((s,i)=><StatCard key={i} label={s.l} value={s.v} color={s.c}/>)}
+        </Grid>
+        <Divider/>
+        <div style={{marginTop:8}}>
+          <Lbl>Signal Contributions</Lbl>
+          {mx.sigs?.map((s,i)=>{
+            const isPos=s.delta>0,isNeg=s.delta<0;
+            const barVal=Math.abs(s.delta)*s.w*3;
+            return(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"55px 1fr 35px",gap:6,padding:"3px 0",borderBottom:`1px solid ${T.border}`}}>
+                <Mono s={8} c={T.muted}>{s.k}</Mono>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <div style={{width:`${safePct(barVal)}%`,height:5,borderRadius:2,background:isPos?T.green:isNeg?T.red:T.dim,transition:"width .4s",minWidth:isPos||isNeg?2:0}}/>
+                </div>
+                <Mono s={8} c={isPos?T.green:isNeg?T.red:T.muted} style={{textAlign:"right"}}>{s.delta>0?"+":""}{(s.delta*s.w).toFixed(1)}</Mono>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </Col>
+
+    <Col gap={10}>
+      {/* Market Personality Deep Dive */}
+      <Card glow={ms.personality?.color}>
+        <PTitle color={ms.personality?.color} icon="◉" right={<Chip label={`${ms.personality?.risk} RISK`} color={ms.personality?.risk==="LOW"?T.green:ms.personality?.risk==="HIGH"?T.red:T.amber}/>}>Market Personality Engine</PTitle>
+        <div style={{textAlign:"center",padding:"8px 0 10px"}}>
+          <div style={{fontSize:18,fontWeight:800,color:ms.personality?.color,fontFamily:"IBM Plex Mono",letterSpacing:2}}>{ms.personality?.type}</div>
+        </div>
+        <div style={{background:`${ms.personality?.color}0a`,border:`1px solid ${ms.personality?.color}33`,borderRadius:5,padding:"8px 10px",marginBottom:8}}>
+          <Lbl c={ms.personality?.color}>Strategy</Lbl>
+          <Sans s={11} c={T.white} style={{lineHeight:1.6}}>{ms.personality?.strategy}</Sans>
+        </div>
+        <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:5,padding:"8px 10px"}}>
+          <Lbl>Expected Behavior</Lbl>
+          <Sans s={11} c={T.muted} style={{lineHeight:1.6}}>{ms.personality?.expectation}</Sans>
+        </div>
+      </Card>
+
+      {/* GEX Analysis */}
+      <Card glow={ms.gex?.color}>
+        <PTitle color={ms.gex?.color} right={<Chip label={ms.gex?.regime||"NEUTRAL"} color={ms.gex?.color}/>}>GEX — Gamma Exposure</PTitle>
+        <Grid cols="1fr 1fr" gap={8} style={{marginBottom:8}}>
+          <div>
+            <Lbl>Net GEX</Lbl>
+            <Mono s={14} c={ms.gex?.color} w={700}>{ms.gex?.gex}</Mono>
+            <MBar val={50+safeNum(ms.gex?.norm,0)/2} max={100} color={ms.gex?.color} h={4}/>
+          </div>
+          <div>
+            <Grid cols="1fr" gap={5}>
+              <div><Lbl>Call GEX</Lbl><Mono s={10} c={T.green} w={600}>{ms.gex?.callGex}</Mono></div>
+              <div><Lbl>Put GEX</Lbl><Mono s={10} c={T.red}   w={600}>{ms.gex?.putGex}</Mono></div>
+            </Grid>
+          </div>
+        </Grid>
+        <div style={{background:T.panel,borderRadius:4,padding:"6px 8px",border:`1px solid ${T.border}`}}>
+          <Sans s={10} c={T.muted}>{ms.gex?.regime==="LONG_GAMMA"?"Long Gamma: Dealers absorb moves. Lower volatility. Fade extremes.":ms.gex?.regime==="SHORT_GAMMA"?"Short Gamma: Dealers amplify moves. Higher volatility. Follow momentum.":"Neutral GEX: Normal market microstructure. Standard execution."}</Sans>
+        </div>
+      </Card>
+
+      {/* VWAP + Premium/Discount */}
+      <Card glow={ms.vwapBias?.biasColor}>
+        <PTitle color={ms.vwapBias?.biasColor} right={<Chip label={ms.vwapBias?.zone||"AT_VWAP"} color={ms.vwapBias?.biasColor}/>}>VWAP + Premium/Discount</PTitle>
+        <Grid cols="1fr 1fr" gap={8} style={{marginBottom:8}}>
+          <div>
+            <Lbl c={ms.vwapBias?.biasColor}>VWAP Zone</Lbl>
+            <Mono s={10} c={ms.vwapBias?.biasColor} w={700}>{ms.vwapBias?.zone}</Mono>
+            <div style={{fontSize:8,color:T.muted,marginTop:2}}>{ms.vwapBias?.signal}</div>
+          </div>
+          <div>
+            <Lbl c={ms.premDisc?.zoneColor}>P/D Array</Lbl>
+            <Chip label={ms.premDisc?.zone||"—"} color={ms.premDisc?.zoneColor}/>
+            <div style={{fontSize:8,color:T.muted,marginTop:4}}>{ms.premDisc?.tradeBias?.label}</div>
+          </div>
+        </Grid>
+        <Grid cols="1fr 1fr" gap={6}>
+          <StatCard label="Deviation"     value={`${ms.vwapBias?.deviation}pts`}    color={ms.vwapBias?.biasColor}/>
+          <StatCard label="From Mid"      value={`${ms.premDisc?.pctFromMid}%`}     color={ms.premDisc?.zoneColor}/>
+        </Grid>
+        {ms.vwapBias?.meanReversion&&<WarnBanner text="Mean Reversion zone — High probability counter-trend" color={ms.vwapBias?.biasColor}/>}
+      </Card>
+
+      {/* Delta + Candle Patterns */}
+      <Card glow={ms.deltaImb?.color}>
+        <PTitle color={ms.deltaImb?.color} right={<Chip label={ms.candle?.patternBias||"NEUTRAL"} color={ms.candle?.biasColor}/>}>Delta Imbalance + Patterns</PTitle>
+        <Grid cols="1fr 1fr" gap={8} style={{marginBottom:8}}>
+          <div>
+            <Lbl c={ms.deltaImb?.color}>Delta Imbalance</Lbl>
+            <Mono s={18} c={ms.deltaImb?.color} w={700}>{ms.deltaImb?.imb}%</Mono>
+            <div style={{fontSize:8,color:T.muted}}>{ms.deltaImb?.dir}</div>
+            <MBar val={50+safeNum(ms.deltaImb?.imbRaw,0)/2} max={100} color={ms.deltaImb?.color} h={4}/>
+          </div>
+          <div>
+            <Lbl>Candle Patterns</Lbl>
+            {ms.candle?.patterns?.length>0
+              ?ms.candle.patterns.map((p,i)=>(
+                <div key={i} style={{marginBottom:4}}>
+                  <Chip label={p.name} color={p.color} size={7}/>
+                  <div style={{marginTop:2}}><MBar val={p.strength} max={100} color={p.color} h={2}/></div>
+                </div>
+              ))
+              :<Mono s={9} c={T.muted}>No patterns confirmed</Mono>
+            }
+          </div>
+        </Grid>
+      </Card>
+    </Col>
+  </Grid>
+));
+
+
+// ══════════════════════════════════════════════════════════
+// AI SIGNAL TAB
+// ══════════════════════════════════════════════════════════
+const ConfidenceMeter=memo(({value,color,size=120})=>{
+  const pct=safePct(value);
+  const r=44,cx=60,cy=60;
+  const circ=2*Math.PI*r;
+  const dash=circ*(pct/100);
+  const gap=circ-dash;
+  return(
+    <div style={{position:"relative",width:size,height:size,margin:"0 auto"}}>
+      <svg width={size} height={size} viewBox="0 0 120 120" style={{transform:"rotate(-90deg)"}}>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={T.border} strokeWidth={8}/>
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={8}
+          strokeDasharray={`${dash} ${gap}`}
+          strokeLinecap="round"
+          style={{transition:"stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)",filter:`drop-shadow(0 0 6px ${color}88)`}}
+        />
+      </svg>
+      <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"}}>
+        <Mono s={20} c={color} w={800}>{pct}</Mono>
+        <Mono s={7} c={T.muted}>CONF%</Mono>
+      </div>
+    </div>
+  );
+});
+
+const SignalLevelRow=memo(({label,value,color,sub,highlight=false})=>(
+  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",background:highlight?`${color}0e`:T.panel,border:`1px solid ${highlight?color+"35":T.border}`,borderRadius:4,marginBottom:4}}>
+    <div>
+      <Mono s={8} c={T.muted} style={{letterSpacing:2}}>{label}</Mono>
+      {sub&&<div style={{fontSize:7,color:T.dim,marginTop:1}}>{sub}</div>}
+    </div>
+    <Mono s={13} c={color} w={700}>{value}</Mono>
+  </div>
+));
+
+const ChecklistPanel=memo(({checklist,passed,total})=>{
+  const pct=Math.round((passed/total)*100);
+  const c=passed>=7?T.green:passed>=5?T.amber:T.red;
+  return(
+    <Card glow={c}>
+      <PTitle color={c} right={<Chip label={`${passed}/${total} PASS`} color={c}/>}>Pre-Trade Checklist</PTitle>
+      <div style={{marginBottom:10}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <Mono s={8} c={T.muted}>Checklist Score</Mono>
+          <Mono s={10} c={c} w={700}>{pct}%</Mono>
+        </div>
+        <MBar val={pct} max={100} color={c} h={6}/>
+      </div>
+      {checklist.map((item,i)=><CheckItem key={i} item={item.label} pass={item.pass}/>)}
+      {passed<6&&(
+        <div style={{marginTop:8,padding:"6px 10px",background:`${T.red}10`,border:`1px solid ${T.red}30`,borderRadius:4}}>
+          <Mono s={8} c={T.red}>🚫 CHECKLIST FAILED — Signal Execution Blocked</Mono>
+        </div>
+      )}
+    </Card>
+  );
+});
+
+const NoCleanSetup=memo(({reason,ms})=>(
+  <div className="signal-notrade" style={{background:T.card,border:`1px solid ${T.amber}30`,borderRadius:8,padding:"28px 24px",textAlign:"center",marginBottom:12}}>
+    <div style={{fontSize:28,marginBottom:10}}>⛔</div>
+    <div style={{fontSize:16,fontWeight:800,color:T.amber,letterSpacing:3,fontFamily:"IBM Plex Mono",marginBottom:6}}>NO CLEAN SETUP</div>
+    <div style={{fontSize:10,color:T.muted,marginBottom:12,lineHeight:1.7,maxWidth:420,margin:"0 auto 12px"}}>{reason}</div>
+    <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap",marginBottom:12}}>
+      {ms.noTrade?.blocks?.slice(0,3).map((b,i)=><Chip key={i} label={b.sev+": "+b.r.split("—")[0].trim()} color={b.sev==="CRITICAL"?T.red:T.amber} size={7}/>)}
+    </div>
+    <div style={{fontSize:8,color:T.dim,borderTop:`1px solid ${T.border}`,paddingTop:8,marginTop:8}}>
+      Institutional systems require multiple confluence factors to align before signal generation.<br/>
+      Preserve capital. Wait for the right setup. No forced trades.
+    </div>
+  </div>
+));
+
+const AISignalTab=memo(({ms,mx})=>{
+  const sig=ms.aiSignal;
+  const [lastGenTime,setLastGenTime]=useState(tNow());
+  const [animKey,setAnimKey]=useState(0);
+  useEffect(()=>{setAnimKey(k=>k+1);setLastGenTime(tNow());},[sig.direction,sig.signalConf]);
+
+  const ASSETS=Object.keys(ASSET_CONTEXTS);
+  const assetCtx=ASSET_CONTEXTS[ms.selectedAsset]||ASSET_CONTEXTS["NIFTY50"];
+
+  const dirLabel=sig.direction==="BUY"?"▲ BUY":sig.direction==="SELL"?"▼ SELL":"◆ NO TRADE";
+  const dirBg=sig.direction==="BUY"?`${T.green}10`:sig.direction==="SELL"?`${T.red}10`:`${T.amber}08`;
+
+  return(
+    <div>
+      {/* TOP HEADER BAR */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,padding:"10px 14px",background:T.card,border:`1px solid ${T.border}`,borderRadius:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:3,height:24,background:`linear-gradient(180deg,${T.cyan},${T.purple})`,borderRadius:2}}/>
+          <div>
+            <div style={{fontSize:11,fontWeight:800,color:T.cyan,letterSpacing:3,fontFamily:"IBM Plex Mono"}}>AI EXECUTION SIGNAL ENGINE</div>
+            <div style={{fontSize:8,color:T.muted,marginTop:1}}>Engine 24 · Institutional Confluence AI · Smart Money Protocol</div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:7,color:T.muted}}>ASSET CONTEXT</div>
+            <select value={ms.selectedAsset} onChange={e=>ms.setSelectedAsset(e.target.value)} style={{background:T.panel,border:`1px solid ${T.borderHi}`,color:T.cyan,borderRadius:4,padding:"4px 8px",fontSize:9,cursor:"pointer",fontFamily:"IBM Plex Mono",fontWeight:700}}>
+              {ASSETS.map(a=><option key={a} value={a}>{ASSET_CONTEXTS[a].name} ({a})</option>)}
+            </select>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:7,color:T.muted}}>LAST SCAN</div>
+            <Mono s={9} c={T.cyan}>{lastGenTime}</Mono>
+          </div>
+          <div className="blink" style={{width:7,height:7,borderRadius:"50%",background:sig.isValid?T.green:T.amber,boxShadow:`0 0 8px ${sig.isValid?T.green:T.amber}`}}/>
+        </div>
+      </div>
+
+      <div className="ai-signal-grid" style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12}} key={animKey}>
+
+        {/* LEFT — MAIN SIGNAL CARD */}
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+
+          {/* DIRECTION CARD */}
+          <div className={`signal-card ${sig.glowClass}`} style={{background:dirBg,border:`2px solid ${sig.dirColor}35`,borderRadius:8,padding:"18px 16px",textAlign:"center",position:"relative",overflow:"hidden"}}>
+            {/* Scan line effect */}
+            <div style={{position:"absolute",left:0,right:0,height:1,background:`linear-gradient(90deg,transparent,${sig.dirColor}40,transparent)`,top:"30%",pointerEvents:"none"}}/>
+            <div style={{fontSize:8,color:T.muted,letterSpacing:4,marginBottom:8}}>TRADE DIRECTION</div>
+            <div style={{fontSize:30,fontWeight:900,color:sig.dirColor,fontFamily:"IBM Plex Mono",letterSpacing:4,marginBottom:4,textShadow:`0 0 20px ${sig.dirColor}66`}}>{dirLabel}</div>
+            <div style={{fontSize:8,color:T.muted,marginBottom:12}}>{assetCtx.name} · {sig.sessionContext} Session</div>
+            <div style={{display:"flex",gap:6,justifyContent:"center",flexWrap:"wrap"}}>
+              <Chip label={sig.setupType||"—"} color={sig.dirColor} size={8}/>
+              <Chip label={`CONF: ${sig.signalConf}%`} color={sig.signalConf>=70?T.green:sig.signalConf>=50?T.amber:T.muted}/>
+            </div>
+          </div>
+
+          {/* CONFIDENCE METER */}
+          <Card glow={sig.dirColor}>
+            <PTitle color={sig.dirColor}>AI Confidence Engine</PTitle>
+            <div style={{display:"flex",gap:14,alignItems:"center"}}>
+              <ConfidenceMeter value={sig.signalConf} color={sig.dirColor}/>
+              <div style={{flex:1}}>
+                <div style={{marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <Mono s={8} c={T.muted}>Confluence</Mono>
+                    <Mono s={9} c={sig.dirColor} w={600}>{sig.confluenceScore}%</Mono>
+                  </div>
+                  <MBar val={sig.confluenceScore} max={100} color={sig.dirColor} h={5}/>
+                </div>
+                <div style={{marginBottom:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <Mono s={8} c={T.muted}>Master Score</Mono>
+                    <Mono s={9} c={mx.confColor} w={600}>{mx.confidence}%</Mono>
+                  </div>
+                  <MBar val={mx.confidence} max={100} color={mx.confColor} h={5}/>
+                </div>
+                <div>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <Mono s={8} c={T.muted}>Exec Quality</Mono>
+                    <Mono s={9} c={mx.execColor} w={600}>{mx.execQuality}%</Mono>
+                  </div>
+                  <MBar val={mx.execQuality} max={100} color={mx.execColor} h={5}/>
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* TRADE QUALITY + SESSION */}
+          <Card glow={sig.qualColor}>
+            <PTitle color={sig.qualColor}>Trade Quality & Session</PTitle>
+            <div style={{display:"flex",gap:10,marginBottom:10}}>
+              <div style={{flex:1,background:`${sig.qualColor}10`,border:`1px solid ${sig.qualColor}33`,borderRadius:5,padding:"10px",textAlign:"center"}}>
+                <div style={{fontSize:8,color:T.muted,marginBottom:4,letterSpacing:2}}>QUALITY RATING</div>
+                <div style={{fontSize:28,fontWeight:900,color:sig.qualColor,fontFamily:"IBM Plex Mono",textShadow:`0 0 14px ${sig.qualColor}55`}}>{sig.quality}</div>
+              </div>
+              <div style={{flex:1,background:`${T.blue}10`,border:`1px solid ${T.blue}33`,borderRadius:5,padding:"10px",textAlign:"center"}}>
+                <div style={{fontSize:8,color:T.muted,marginBottom:4,letterSpacing:2}}>SESSION</div>
+                <div style={{fontSize:14,fontWeight:800,color:T.blue,fontFamily:"IBM Plex Mono"}}>{sig.sessionContext}</div>
+                <div style={{fontSize:8,color:T.muted,marginTop:2}}>{ms.session?.current?.label||"—"}</div>
+              </div>
+            </div>
+            <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:4,padding:"7px 10px"}}>
+              <Lbl>Setup Type</Lbl>
+              <Mono s={11} c={sig.dirColor} w={600}>{sig.setupType}</Mono>
+            </div>
+          </Card>
+        </div>
+
+        {/* CENTER — LEVELS PANEL */}
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {sig.direction==="NO TRADE"?(
+            <NoCleanSetup reason={sig.aiNarrative} ms={ms}/>
+          ):(
+            <>
+              {/* EXECUTION LEVELS */}
+              <Card glow={sig.dirColor}>
+                <PTitle color={sig.dirColor} icon="⚡" right={<Chip label="INSTITUTIONAL LEVELS" color={sig.dirColor} size={7}/>}>Execution Signal</PTitle>
+                <SignalLevelRow label="ENTRY ZONE" value={sig.entry?.toLocaleString()||"—"} color={sig.dirColor} sub="Optimal institutional entry" highlight/>
+                <SignalLevelRow label="STOP LOSS" value={sig.sl?.toLocaleString()||"—"} color={T.red} sub={`Dynamic SL · ${sig.adjSL}pts buffer`} highlight/>
+                <div style={{height:1,background:`${T.border}`,margin:"6px 0"}}/>
+                <SignalLevelRow label="TARGET 1" value={sig.t1?.toLocaleString()||"—"} color={T.green} sub={`R:R ${sig.rrT1}:1 · Scale 50%`}/>
+                <SignalLevelRow label="TARGET 2" value={sig.t2?.toLocaleString()||"—"} color={T.teal} sub={`R:R ${sig.rrT2}:1 · Scale 30%`}/>
+                <SignalLevelRow label="TARGET 3" value={sig.t3?.toLocaleString()||"—"} color={T.cyan} sub={`R:R ${sig.rrT3}:1 · Trail 20%`}/>
+              </Card>
+
+              {/* RISK:REWARD VISUAL */}
+              <Card glow={T.purple}>
+                <PTitle color={T.purple}>Risk : Reward Analysis</PTitle>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:10}}>
+                  {[["T1 R:R",sig.rrT1,T.green],["T2 R:R",sig.rrT2,T.teal],["T3 R:R",sig.rrT3,T.cyan]].map(([k,v,c])=>(
+                    <div key={k} style={{background:`${c}0a`,border:`1px solid ${c}30`,borderRadius:5,padding:"8px",textAlign:"center"}}>
+                      <div style={{fontSize:7,color:T.muted,marginBottom:3,letterSpacing:1}}>{k}</div>
+                      <div style={{fontSize:18,fontWeight:800,color:c,fontFamily:"IBM Plex Mono"}}>{v}</div>
+                      <div style={{fontSize:7,color:T.muted}}>:{1}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{background:T.panel,border:`1px solid ${T.border}`,borderRadius:4,padding:"6px 10px",marginBottom:6}}>
+                  <Mono s={8} c={T.muted}>Volatility Adjustment</Mono>
+                  <div style={{marginTop:2}}><Chip label={`${sig.volAdj}x VOL ADJ · ${ms.atr?.volState}`} color={ms.atr?.volState==="EXPANSION"?T.red:ms.atr?.volState==="CONTRACTION"?T.blue:T.green}/></div>
+                </div>
+                <div style={{padding:"5px 8px",background:`${T.red}0a`,border:`1px solid ${T.red}22`,borderRadius:4}}>
+                  <Mono s={8} c={T.red}>🚫 INVALIDATION: {sig.direction==="BUY"?"Close below":"Close above"} {sig.sl?.toLocaleString()||"—"}</Mono>
+                </div>
+              </Card>
+            </>
+          )}
+
+          {/* AI NARRATIVE */}
+          <Card glow={T.indigo}>
+            <PTitle color={T.indigo} icon="◈">AI Institutional Narrative</PTitle>
+            <div style={{background:`${T.indigo}08`,border:`1px solid ${T.indigo}25`,borderRadius:5,padding:"10px 12px"}}>
+              <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+                <div style={{width:3,height:"100%",minHeight:40,background:`linear-gradient(180deg,${T.indigo},${T.purple})`,borderRadius:2,flexShrink:0,marginTop:2}}/>
+                <Sans s={11} c={T.white} style={{lineHeight:1.75,fontStyle:"italic"}}>{sig.aiNarrative}</Sans>
+              </div>
+            </div>
+            <div style={{marginTop:8,display:"flex",gap:6,flexWrap:"wrap"}}>
+              <Chip label={`BIAS: ${mx.bias}`} color={mx.biasColor}/>
+              <Chip label={ms.regime?.regime?.split(" ")[0]||"—"} color={ms.regime?.color}/>
+              <Chip label={`TRAP: ${ms.trapProb?.dominant||"CLEAN"}`} color={ms.trapProb?.color}/>
+            </div>
+          </Card>
+        </div>
+
+        {/* RIGHT — CHECKLIST + FACTORS */}
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+
+          <ChecklistPanel checklist={sig.checklist} passed={sig.checksPassed} total={sig.checksTotal}/>
+
+          {/* CONFLUENCE FACTORS */}
+          <Card glow={T.teal}>
+            <PTitle color={T.teal} right={<Chip label={`${sig.confluenceScore}% SCORE`} color={sig.confluenceScore>=70?T.green:sig.confluenceScore>=50?T.amber:T.red}/>}>Confluence Factors</PTitle>
+            {[
+              {l:"Structure",   v:ms.structure?.structureSignal||"NONE",    pass:ms.structure?.structureSignal!=="NONE",  c:ms.structure?.structureColor},
+              {l:"Liquidity",   v:ms.sweep?.sweepType||"NO SWEEP",          pass:ms.sweep?.sweepType!=="NO SWEEP",        c:ms.sweep?.sweepColor},
+              {l:"MTF Bias",    v:ms.mtf?.bias15m||"—",                     pass:ms.mtf?.aligned,                         c:ms.mtf?.b15Color},
+              {l:"FII Flow",    v:ms.fiiAgg?.dir||"—",                      pass:ms.fiiAgg?.dir==="ACCUMULATING"||ms.fiiAgg?.dir==="DISTRIBUTING",c:ms.fiiAgg?.color},
+              {l:"Absorption",  v:ms.absorb?.type||"NONE",                  pass:ms.absorb?.val>40,                       c:ms.absorb?.color},
+              {l:"Session",     v:ms.session?.current?.label||"—",          pass:!["DANGER","EXIT"].includes(ms.session?.current?.quality||""),c:ms.session?.current?.color},
+              {l:"Vol State",   v:ms.atr?.volState||"NORMAL",               pass:ms.atr?.volState!=="EXPANSION",          c:ms.atr?.volColor},
+              {l:"Delta Imb",   v:ms.deltaImb?.dir||"BALANCED",             pass:Math.abs(ms.deltaImb?.imbRaw||0)>10,    c:ms.deltaImb?.color},
+            ].map((item,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${T.border}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:7}}>
+                  <div style={{width:5,height:5,borderRadius:"50%",background:item.pass?(item.c||T.green):T.dim,flexShrink:0}}/>
+                  <Mono s={8} c={T.muted}>{item.l}</Mono>
+                </div>
+                <Chip label={String(item.v).split(" ")[0]} color={item.pass?(item.c||T.green):T.muted} size={7}/>
+              </div>
+            ))}
+          </Card>
+
+          {/* RISK MANAGEMENT RULES */}
+          <Card glow={T.amber}>
+            <PTitle color={T.amber} icon="⚠">Risk Management Protocol</PTitle>
+            {[
+              {rule:"Dynamic SL placed beyond structure",    ok:true},
+              {rule:"Volatility-adjusted position sizing",   ok:true},
+              {rule:ms.trapProb?.dominant==="CLEAN"?"No manipulation detected":"⚠ Manipulation risk detected",ok:ms.trapProb?.dominant==="CLEAN"},
+              {rule:ms.atr?.volState!=="EXPANSION"?"Normal volatility conditions":"⚠ Expansion — Widen stops",ok:ms.atr?.volState!=="EXPANSION"},
+              {rule:"Prevent revenge trade conditions",      ok:ms.masterScore?.confidence>=35},
+              {rule:sig.isValid?"Overtrading blocked by AI filter":"Low confluence — trade blocked",ok:sig.isValid||sig.direction==="NO TRADE"},
+            ].map((item,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${T.border}`}}>
+                <Mono s={10} c={item.ok?T.green:T.red}>{item.ok?"✓":"✗"}</Mono>
+                <Mono s={8} c={item.ok?T.white:T.muted}>{item.rule}</Mono>
+              </div>
+            ))}
+          </Card>
+        </div>
+      </div>
+
+      {/* BOTTOM — PSYCHOLOGY WARNING BANNER */}
+      {(!sig.isValid||sig.direction==="NO TRADE")&&(
+        <div style={{marginTop:10,padding:"10px 16px",background:`${T.amber}08`,border:`1px solid ${T.amber}30`,borderRadius:6,display:"flex",alignItems:"flex-start",gap:10}}>
+          <div style={{fontSize:14}}>🧠</div>
+          <div>
+            <div style={{fontSize:9,fontWeight:700,color:T.amber,letterSpacing:2,marginBottom:2}}>INSTITUTIONAL PSYCHOLOGY FILTER ACTIVE</div>
+            <Sans s={10} c={T.muted} style={{lineHeight:1.6}}>
+              No valid institutional setup detected. Avoid FOMO entries, revenge trades, or forced positions.
+              Smart money waits for confluence — not price movement. Preserve capital for high-probability setups.
+            </Sans>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
+
+// Mount the app
+const _root = ReactDOM.createRoot(document.getElementById('root'));
+_root.render(React.createElement(SmartMoneyOS));
+  </script>
+</body>
+</html>

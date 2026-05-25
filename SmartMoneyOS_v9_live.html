@@ -8,6 +8,11 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <!-- Babel Standalone for JSX -->
+  <script>
+const JSONBIN_URL="https://api.jsonbin.io/v3/b/6a140861ee5a733b12174e42/latest";
+const JSONBIN_KEY="$2a$10$ipQ8pLDLij0d50WWhqLrm.XuQusvyaP9Ux6bLva9UIrcnMpXIbKEa";
+async function fetchAISignal(){try{const r=await fetch(JSONBIN_URL,{headers:{"X-Master-Key":JSONBIN_KEY,"X-Bin-Meta":"false"}});const d=await r.json();return d.record||d;}catch(e){return null;}}
+  </script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}

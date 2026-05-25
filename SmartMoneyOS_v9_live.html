@@ -2594,11 +2594,28 @@ const AISignalTab=memo(({ms,mx})=>{
     </div>
   );
 });
-
+// N8N Live Signal Display
+const N8NSignalBanner=()=>{
+  const [d,setD]=useState(null);
+  const [t,setT]=useState("Loading...");
+  useEffect(()=>{
+    const load=async()=>{const r=await fetchAISignal();if(r){setD(r);setT(new Date().toLocaleTimeString());}};
+    load();const iv=setInterval(load,300000);return()=>clearInterval(iv);
+  },[]);
+  if(!d)return null;
+  return React.createElement('div',{style:{position:'fixed',bottom:0,left:0,right:0,background:'#050d1a',borderTop:'1px solid #00ff9430',padding:'6px 16px',display:'flex',gap:20,alignItems:'center',zIndex:9999}},
+    React.createElement('span',{style:{color:'#00e5ff',fontSize:9,fontWeight:800,letterSpacing:2}},'N8N LIVE'),
+    React.createElement('span',{style:{color:d.last_signal==='BULLISH'?'#00ff94':'#ff2d55',fontSize:11,fontWeight:900}},d.last_signal||'--'),
+    React.createElement('span',{style:{color:'#e8edf5',fontSize:9}},'Entry: '+( d.entry||'--')),
+    React.createElement('span',{style:{color:'#ff2d55',fontSize:9}},'SL: '+(d.sl||'--')),
+    React.createElement('span',{style:{color:'#00ff94',fontSize:9}},'T1: '+(d.target1||'--')),
+    React.createElement('span',{style:{color:'#4a5568',fontSize:8}},t)
+  );
+};
 
 // Mount the app
 const _root = ReactDOM.createRoot(document.getElementById('root'));
-_root.render(React.createElement(SmartMoneyOS));
+    _root.render(React.createElement(React.Fragment,null,React.createElement(SmartMoneyOS),React.createElement(N8NSignalBanner)));
   </script>
 </body>
 </html>
